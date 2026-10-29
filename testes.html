@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Testes do motor: monitoramento contínuo da passarela</title>
+<style>
+  body { font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; max-width: 900px; margin: 24px auto; padding: 0 16px; }
+  li { margin: 4px 0; } .ok { color: #006300; } .falha { color: #d03b3b; font-weight: 650; }
+  .det { color: #52514e; font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>Testes do motor</h1>
+<p id="resumo">Executando…</p>
+<ol id="lista"></ol>
+<script src="motor.js"></script>
+<script>
+// INICIO_TESTES
+function base(alt) {
+  const p = JSON.parse(JSON.stringify(Motor.PARAM_PADRAO));
+  // mesma linha de base do padrão (14 dias, 24 eventos por dia), em 40 dias para rodar mais rápido
+  p.dias = 40; p.dano.inicio_dia = 26; p.dano.fim_dia = 32;
+  if (alt) alt(p);
+  return p;
+}
+
+const TESTES = [
+  ['FFT com interpolação: senoide pura de 7,9 Hz identificada a menos de 5 mHz', () => {
+    const fs = 1000, a = new Float64Array(4100);
+    for (let i = 0; i < a.length; i++) a[i] = Math.exp(-0.7 * i / fs) * Math.sin(2 * Math.PI * 7.9 * i / fs);
+    const pk = Motor.picoDominante(Motor.espectro(a, fs, 50));
+    return [Math.abs(pk.f_interp - 7.9) < 0.005, `grade ${pk.f_grade.toFixed(4)} Hz, interpolada ${pk.f_interp.toFixed(4)} Hz`];
+  }],
+  ['Grade da FFT de 4,1 s com zero-padding: espaçamento de cerca de 0,12 Hz', () => {
+    const esp = Motor.espectro(new Float64Array(4100).fill(0).map((_, i) => Math.sin(i)), 1000, 50);
+    return [Math.abs(esp.df - 1000 / 8192) < 1e-9, `${esp.df.toFixed(4)} Hz`];
+  }],
+  ['Determinismo: a mesma semente produz os mesmos estados', () => {
+    const a = Motor.simular(base()), b = Motor.simular(base());
+    const ea = a.sensores.map(r => r.com.estado.join()).join('|'), eb = b.sensores.map(r => r.com.estado.join()).join('|');
+    return [ea === eb && a.sensores[0].f_interp[50] === b.sensores[0].f_interp[50], ''];
+  }],
+  ['Linha de base: os primeiros dias ficam em BASELINE', () => {
+    const r = Motor.simular(base());
+    const ok = r.sensores.every(s => s.com.estado.slice(0, 14).every(e => e === 'BASELINE') && s.com.estado[14] !== 'BASELINE');
+    return [ok, ''];
+  }],
+  ['Sem perda de rigidez e com compensação: nenhum ALERTA', () => {
+    const r = Motor.simular(base(p => { p.dano.perda_rigidez = 0; }));
+    const n = r.sensores.reduce((s, x) => s + x.com.estado.filter(e => e === 'ALERTA').length, 0);
+    return [n === 0, `${n} dias em ALERTA`];
+  }],
+  ['Perda de rigidez de 2%: ALERTA com compensação depois do início', () => {
+    const r = Motor.simular(base(p => { p.dano.perda_rigidez = 0.02; }));
+    const ok = r.sensores.every(s => s.ind.com.atraso_dias !== null);
+    return [ok, r.sensores.map(s => `${s.sensor_id}: ${s.ind.com.atraso_dias} dias`).join('; ')];
+  }],
+  ['Compensação: efeito da temperatura estimado a menos de 10% do real', () => {
+    const r = Motor.simular(base(p => { p.dano.perda_rigidez = 0; }));
+    const real = r.param.temperatura.coef_por_c * r.param.modos[0].f_hz, est = r.sensores[0].coef_temp;
+    return [Math.abs(est / real - 1) < 0.1, `estimado ${(est * 1000).toFixed(2)} mHz/°C; real ${(real * 1000).toFixed(2)} mHz/°C`];
+  }],
+  ['Sem efeito da temperatura: os dois critérios coincidem na detecção', () => {
+    const r = Motor.simular(base(p => { p.temperatura.coef_por_c = 0; p.dano.perda_rigidez = 0.02; }));
+    const s = r.sensores[0];
+    return [s.ind.sem.atraso_dias !== null && s.ind.com.atraso_dias !== null, `sem ${s.ind.sem.atraso_dias}, com ${s.ind.com.atraso_dias}`];
+  }],
+  ['Snapshot no formato da plataforma: um registro por Sensor_ID, campos obrigatórios', () => {
+    const r = Motor.simular(base());
+    const campos = ['sensor_id', 'channel', 'location', 'sampling_rate_hz', 'mef_reference_hz', 'dominant_frequency_hz',
+      'status_label', 'status_message', 'peaks', 'signal', 'fft'];
+    const ids = r.param.sensores.map(s => s.sensor_id).join();
+    const ok = r.snapshot.sensors.map(s => s.sensor_id).join() === ids &&
+      r.snapshot.sensors.every(s => campos.every(c => c in s) && Motor.ESTADOS.includes(s.status_label) &&
+        s.signal.time_s.length === s.signal.acceleration_g.length && s.fft.frequency_hz.length === s.fft.amplitude_g.length);
+    return [ok, ids];
+  }],
+  ['Snapshot no IFC: menos de 1 kB por dia', () => {
+    const r = Motor.simular(base());
+    return [r.volume.snapshot_bytes < 1024 && r.pset.every(x => Motor.ESTADOS.includes(x.LastStatus)), `${r.volume.snapshot_bytes} bytes`];
+  }],
+  ['Fluxo: sem travessias de madrugada, nenhuma medição nessas horas', () => {
+    const r = Motor.simular(base());
+    const madrugada = r.fluxo.por_hora.slice(0, 5);
+    return [madrugada.every(x => x.travessias === 0 && x.horas_com_medicao === 0), `medições por dia: ${r.fluxo.medicoes_dia.toFixed(1)}`];
+  }],
+  ['Fluxo: trecho livre só com a passarela vazia por uma janela inteira', () => {
+    const p = base(), J = p.aquisicao.janela_s;
+    let ok = true;
+    for (let h = 0; h < 48; h++) {
+      const trav = Motor.fluxoHora(p, h);
+      for (const jl of Motor.janelasLivres(p, trav)) {
+        if (trav.some(c => c.t0 < jl.t + J && c.fim > jl.t && c !== jl.travessia)) ok = false;
+      }
+    }
+    return [ok, ''];
+  }],
+  ['Ensaio virtual: mesmas travessias do monitoramento e pessoas dentro do vão', () => {
+    const p = base(), e = Motor.ensaioVirtual(p, 0, 8), trav = Motor.fluxoHora(p, 8);
+    const mesmas = e.travessias.length === trav.length && e.travessias.every((c, i) => c.t0 === trav[i].t0);
+    let dentro = true;
+    for (let t = 0; t < 3600; t += 7) for (const q of Motor.pessoasNoInstante(e, t)) if (q.x < 0 || q.x > p.vao_m) dentro = false;
+    return [mesmas && dentro && e.pico_g > 0, `${e.travessias.length} travessias, pico ${(e.pico_g * 9.81).toFixed(2)} m/s² (${e.classe})`];
+  }],
+  ['Demonstração: cenas em sequência, com vibração livre depois de cada uma', () => {
+    const e = Motor.ensaioDemo(base());
+    const cenas = e.travessias.filter(c => c.rotulo).length;
+    const livres = e.janelas_livres.length === cenas;   // as duas pessoas em sentidos opostos formam uma cena
+    return [cenas === 5 && livres && e.dur < 120, `${e.travessias.length} travessias, ${e.pessoas} pessoas, ${e.dur} s, pico ${(e.pico_g * 9.81).toFixed(2)} m/s²`];
+  }]
+];
+
+function executarTestes() {
+  return TESTES.map(([nome, f]) => {
+    try { const [ok, det] = f(); return { nome, ok: !!ok, det }; }
+    catch (e) { return { nome, ok: false, det: 'erro: ' + e.message }; }
+  });
+}
+// FIM_TESTES
+
+setTimeout(() => {
+  const res = executarTestes();
+  document.getElementById('lista').innerHTML = res.map(r =>
+    `<li class="${r.ok ? 'ok' : 'falha'}">${r.ok ? 'OK' : 'FALHA'}: ${r.nome}${r.det ? ` <span class="det">(${r.det})</span>` : ''}</li>`).join('');
+  const n = res.filter(r => r.ok).length;
+  document.getElementById('resumo').textContent = `${n} de ${res.length} testes passaram.`;
+}, 30);
+</script>
+</body>
+</html>

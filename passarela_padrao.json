@@ -1,0 +1,116 @@
+{
+  "semente": 2026,
+  "dias": 60,
+  "dias_baseline": 14,
+  "vao_m": 11.95,
+  "aquisicao": {
+    "fs_hz": 1000,
+    "janela_s": 4.1,
+    "f_max_hz": 50
+  },
+  "medicoes_max_por_hora": 1,
+  "modos": [
+    {
+      "f_hz": 7.93457,
+      "amortecimento": 0.01468
+    },
+    {
+      "f_hz": 9.765625,
+      "amortecimento": 0.01066
+    }
+  ],
+  "sensores": [
+    {
+      "sensor_id": "ACC_MV_01",
+      "canal": "A1272_18A",
+      "posicao": "Meio do vão",
+      "amplitudes_g": [
+        0.04988,
+        0.01969
+      ]
+    },
+    {
+      "sensor_id": "ACC_QV_01",
+      "canal": "A1274_18A",
+      "posicao": "1/4 do vão",
+      "amplitudes_g": [
+        0.0293,
+        0.01155
+      ]
+    },
+    {
+      "sensor_id": "ACC_AP_01",
+      "canal": "A1275_18A",
+      "posicao": "Apoio",
+      "amplitudes_g": [
+        0.00121,
+        0.00051
+      ]
+    }
+  ],
+  "f_mef_hz": 6.91394,
+  "fluxo": {
+    "travessias_por_hora": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      4,
+      25,
+      40,
+      15,
+      10,
+      12,
+      30,
+      35,
+      12,
+      10,
+      12,
+      25,
+      40,
+      20,
+      8,
+      5,
+      2,
+      1
+    ],
+    "grupo_extra_fora_pico": 0.3,
+    "grupo_extra_pico": 2,
+    "peso_medio_kg": 70,
+    "peso_desvio_kg": 12,
+    "passo_hz": [
+      1.6,
+      2.2
+    ],
+    "comprimento_passo_m": 0.7,
+    "intervalo_grupo_s": 0.6,
+    "pico_1_pessoa_g": 0.08
+  },
+  "ruido_g": 0.0003,
+  "dispersao_amplitude": 0.25,
+  "repetibilidade": 0.0005,
+  "temperatura": {
+    "ref_c": 22,
+    "ciclo_diario_c": 6,
+    "oscilacao_c": 1.5,
+    "periodo_oscilacao_dias": 9,
+    "aquecimento_c": 4,
+    "ruido_c": 0.8,
+    "atraso_h": 2,
+    "erro_termometro_c": 0.5,
+    "coef_por_c": -0.001
+  },
+  "dano": {
+    "inicio_dia": 40,
+    "fim_dia": 50,
+    "perda_rigidez": 0.01
+  },
+  "criterio": {
+    "k_atencao": 2,
+    "k_alerta": 3,
+    "persistencia_dias": 2,
+    "interpolacao": true
+  }
+}
