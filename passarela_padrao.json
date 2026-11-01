@@ -140,10 +140,19 @@
     "tempo_amarelo_s": 10,
     "tempo_vermelho_s": 20
   },
+  "flecha": {
+    "massa_kg_m": 255,
+    "E_pa": 210000000000,
+    "I_perfil_m4": 0.00010784649,
+    "longarinas": 2,
+    "limite_razao": 350,
+    "fracao_amarelo": 0.8
+  },
   "cenarios": {
     "multidao_pessoas": 25,
     "multidao_chegada_s": 15,
     "chuva_max_mmh": 30,
-    "vento_max_ms": 18
+    "vento_max_ms": 18,
+    "parada_pessoas": 110
   }
 }

@@ -178,7 +178,7 @@
       <h2>Ensaio virtual: pessoas atravessando a passarela</h2>
       <p class="nota">A demonstração mostra, em cerca de 1,5 min, o uso normal, sem alertas: uma pessoa, um casal ultrapassado por uma pessoa apressada, três e quatro lado a lado, duas em sentidos opostos. Os três cenários de alerta usam os mesmos pedestres, com grupos cada vez maiores e uma multidão no fim. Em "Hora do dia", escolha o dia e a hora; as travessias são as mesmas usadas no monitoramento, e uma velocidade maior ajuda a percorrer a hora. Os cenários hipotéticos (situações de alerta, chuva e vento, falha de sensor) servem para acionar os alarmes; seus valores estão na aba Parâmetros. Cada passo excita os modos na forma sen(πx/L); a deformação do tabuleiro está ampliada. Embaixo, a vibração aparece parada, como uma corda: a faixa mostra a oscilação no último 0,5 s e, sob cada sensor, os traços marcam o máximo desde o início. O semáforo das cabeceiras segue os limiares da aba Parâmetros; no simulador, os pedestres não obedecem ao VERMELHO, e as entradas nesse estado são contadas.</p>
       <div class="acoes">
-        <label class="campo" style="min-width:200px">Cenário<select id="ens-cenario"><option value="demo" selected>Demonstração: grupos típicos</option><option value="hora">Hora do dia (fluxo sorteado)</option><option value="alerta">Hipotético: situações de alerta</option><option value="tempestade">Hipotético: chuva e vento</option><option value="falha">Hipotético: falha de sensor</option></select></label>
+        <label class="campo" style="min-width:200px">Cenário<select id="ens-cenario"><option value="demo" selected>Demonstração: grupos típicos</option><option value="hora">Hora do dia (fluxo sorteado)</option><option value="alerta">Hipotético: situações de alerta</option><option value="tempestade">Hipotético: chuva e vento</option><option value="falha">Hipotético: falha de sensor</option><option value="parada">Hipotético: multidão parada</option></select></label>
         <label class="campo" style="min-width:90px">Dia<input type="number" id="ens-dia" min="1" step="1" value="1" disabled></label>
         <label class="campo" style="min-width:90px">Hora<input type="number" id="ens-hora" min="0" max="23" step="1" value="8" disabled></label>
         <label class="campo" style="min-width:120px">Velocidade<select id="ens-vel"><option value="1" selected>1×</option><option value="5">5×</option><option value="20">20×</option><option value="60">60×</option></select></label>
@@ -187,14 +187,18 @@
         <span class="estado" id="ens-msg"></span>
       </div>
       <div class="fig" id="ens-fig" style="margin-top:12px"></div>
+      <h3>Aceleração, flecha e ocupação segundo a segundo</h3>
+      <p class="nota">Valores usados pelo semáforo em cada segundo do ensaio. O tracejado marca os limiares do AMARELO e do VERMELHO; a linha vertical acompanha a animação. A flecha é calculada pela viga biapoiada equivalente, com o peso de cada pessoa na sua posição.</p>
+      <div class="fig" id="ens-graf"></div>
+      <div class="acoes" style="margin-top:8px"><button class="b peq" id="bt-png-ens">Baixar PNG (cinza)</button></div>
       <div class="blocos" id="ens-blocos" style="margin-top:12px"></div>
       <h3>Registro de alarmes do ensaio</h3>
       <p class="nota">Trocas de cor do semáforo e avisos. As linhas ainda não alcançadas pela animação aparecem esmaecidas.</p>
       <div class="rolagem" style="max-height:260px;overflow-y:auto"><table id="ens-reg"></table></div>
     </div>
     <div class="cartao">
-      <h2>Ensaios de alarme (E1 a E5)</h2>
-      <p class="nota">Estudo de casos com os parâmetros atuais: E1 dia normal (24 h); E2 situações de alerta; E3 chuva e vento; E4 perda de rigidez (dos 60 dias simulados); E5 falha de sensor. Leva alguns segundos.</p>
+      <h2>Ensaios de alarme (E1 a E6)</h2>
+      <p class="nota">Estudo de casos com os parâmetros atuais: E1 dia normal (24 h); E2 situações de alerta; E3 chuva e vento; E4 perda de rigidez (dos 60 dias simulados); E5 falha de sensor; E6 multidão parada. Leva alguns segundos.</p>
       <div class="acoes">
         <button class="b pri" id="bt-ensaios">Rodar ensaios</button>
         <button class="b" id="bt-alarmes" disabled>Baixar registro de alarmes (CSV)</button>
@@ -246,9 +250,14 @@ const GRUPOS = [
     ['Vento, AMARELO (m/s)', 'semaforo.vento_ms.0', 1, 1], ['Vento, VERMELHO (m/s)', 'semaforo.vento_ms.1', 1, 1],
     ['Histerese (%)', 'semaforo.histerese', 100, 1], ['Tempo para sair do AMARELO (s)', 'semaforo.tempo_amarelo_s', 1, 5],
     ['Tempo para sair do VERMELHO (s)', 'semaforo.tempo_vermelho_s', 1, 10]]],
+  ['Flecha no meio do vão (viga biapoiada equivalente)', [
+    ['Massa por metro (kg/m; 0 = EI das longarinas)', 'flecha.massa_kg_m', 1, 5],
+    ['E do aço (GPa)', 'flecha.E_pa', 1e-9, 5], ['I de cada longarina (cm⁴)', 'flecha.I_perfil_m4', 1e8, 10], ['Longarinas', 'flecha.longarinas', 1, 1],
+    ['VERMELHO acima de L/', 'flecha.limite_razao', 1, 10], ['AMARELO (fração do limite)', 'flecha.fracao_amarelo', 1, 0.05]]],
   ['Cenários de alarme (ensaio virtual)', [
     ['Situações de alerta: multidão (pessoas)', 'cenarios.multidao_pessoas', 1, 5], ['Situações de alerta: multidão chega em (s)', 'cenarios.multidao_chegada_s', 1, 5],
-    ['Chuva e vento: chuva máxima (mm/h)', 'cenarios.chuva_max_mmh', 1, 5], ['Chuva e vento: vento máximo (m/s)', 'cenarios.vento_max_ms', 1, 1]]]
+    ['Chuva e vento: chuva máxima (mm/h)', 'cenarios.chuva_max_mmh', 1, 5], ['Chuva e vento: vento máximo (m/s)', 'cenarios.vento_max_ms', 1, 1],
+    ['Multidão parada (pessoas)', 'cenarios.parada_pessoas', 1, 5]]]
 ];
 
 let P = JSON.parse(JSON.stringify(Motor.PARAM_PADRAO));
@@ -339,7 +348,9 @@ function marcas(min, max, n = 5) {
   const passo = [1, 2, 2.5, 5, 10].map(m => m * pot).find(p => p >= passo0);
   const saida = [];
   for (let v = Math.ceil(min / passo) * passo; v <= max + 1e-9; v += passo) saida.push(+v.toFixed(10));
-  return { valores: saida, casas: Math.max(0, -Math.floor(Math.log10(passo) + 1e-9)) };
+  // passo de 2,5 × 10^k pede uma casa a mais (2,5 e não 3)
+  const extra = Math.abs(passo / pot - 2.5) < 1e-9 ? 1 : 0;
+  return { valores: saida, casas: Math.max(0, -Math.floor(Math.log10(passo) + 1e-9) + extra) };
 }
 
 function figuraSVG(res, j, T) {
@@ -539,7 +550,9 @@ function quadroEnsaioSVG(E, t, T) {
   let anuncio;
   if (pessoas.length) {
     const grupos = new Set(pessoas.map(q => q.grupo)).size, peso = pessoas.reduce((a, q) => a + q.peso, 0);
-    anuncio = `Atravessando: ${qtd(pessoas.length)}${grupos > 1 ? ` em ${grupos} grupos` : ''}, ${num(peso, 0)} kg no total`;
+    anuncio = pessoas.some(q => q.parado)
+      ? `Parados sobre a passarela: ${qtd(pessoas.length)}, ${num(peso, 0)} kg no total`
+      : `Atravessando: ${qtd(pessoas.length)}${grupos > 1 ? ` em ${grupos} grupos` : ''}, ${num(peso, 0)} kg no total`;
   } else {
     const prox = E.travessias.find(c => c.t0 > t);
     anuncio = prox ? `Passarela vazia. Próximo grupo: ${qtd(prox.pesos.length)}, ${num(prox.peso_total, 0)} kg, ` +
@@ -584,6 +597,63 @@ function quadroEnsaioSVG(E, t, T) {
   if (livre !== undefined) s += `<text x="${x1}" y="${gy0 - 6}" text-anchor="end" font-size="11" font-weight="650">vibração livre${E.medidas.includes(livre) ? ': trecho em medição' : ''}</text>`;
   s += `<text transform="translate(26 ${gm}) rotate(-90)" text-anchor="middle" font-size="11">a (m/s²)</text>`;
   s += `<text x="${x0}" y="${H - 6}" font-size="11">faixa: oscilação no último 0,5 s · traços: máximo desde o início · tracejado amarelo e vermelho: limiares do semáforo (m/s²)</text>`;
+  return s + '</svg>';
+}
+
+// Gráficos do ensaio, segundo a segundo: aceleração máxima, flecha no meio do vão e ocupação, com os
+// limiares do semáforo tracejados. Um limiar muito acima da curva fica fora da escala e é citado no
+// painel. Com cursor (só na tela), uma linha vertical acompanha a animação (E.graf_x converte t em x).
+function graficosEnsaioSVG(E, T, cursor) {
+  const S = E.serie, p = E.param, n = S.pico_ms2.length, area = p.vao_m * p.largura_m, cinza = T === TEMA_CINZA;
+  const W = 760, Es = 56, Dm = 50, L = W - Es - Dm, alt = 92, gap = 30, topo = 22, H = topo + 3 * alt + 2 * gap + 58;
+  const niveis = new Set();   // níveis de limiar desenhados (para a legenda)
+  const x = t => Es + L * t / Math.max(1, n);
+  const minutos = n > 600, [fA, fV] = Motor.limitesFlechaMm(p);
+  const paineis = [
+    ['Aceleração máxima (m/s²)', S.pico_ms2, p.semaforo.pico_ms2, 2],
+    ['Flecha no meio do vão (mm)', S.flecha_mm, [fA, fV], 1],
+    ['Ocupação (pessoas/m²)', Array.from(S.ocupacao, o => o / area),
+      [p.semaforo.ocupacao_pm2[0], E.ambiente ? p.semaforo.ocupacao_clima_pm2 : p.semaforo.ocupacao_pm2[1]], 2]
+  ];
+  const estilo = nv => cinza ? (nv === 1 ? ['#555555', '7 4'] : ['#000000', '2 2']) : [nv === 1 ? COR_SEM.AMARELO : COR_SEM.VERMELHO, '7 4'];
+  let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" font-family="Times New Roman, serif" font-size="12" fill="${T.texto}">`;
+  if (T.fundo !== 'transparent') s += `<rect width="${W}" height="${H}" fill="${T.fundo}"/>`;
+  paineis.forEach(([rot, serie, lims, casas], i) => {
+    const y0 = topo + i * (alt + gap), y1 = y0 + alt;
+    let vmax = 0;
+    for (const v of serie) vmax = Math.max(vmax, v);
+    const ls = lims.map((l, j) => [l, j + 1]).filter(([l]) => l > 0);
+    const dentro = ls.filter(([l]) => l <= 4 * vmax), fora = ls.filter(([l]) => l > 4 * vmax);
+    const vtop = Math.max(vmax, ...dentro.map(([l]) => l), 1e-3) * 1.15, y = v => y1 - (y1 - y0) * v / vtop;
+    const mk = marcas(0, vtop, 3);
+    mk.valores.forEach(v => {
+      s += `<line x1="${Es}" x2="${W - Dm}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="${T.grade}"/>`;
+      s += `<text x="${Es - 6}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end">${num(v, mk.casas)}</text>`;
+    });
+    dentro.forEach(([l, nv]) => {
+      const [c, d] = estilo(nv);
+      niveis.add(nv);
+      s += `<line x1="${Es}" x2="${W - Dm}" y1="${y(l).toFixed(1)}" y2="${y(l).toFixed(1)}" stroke="${c}" stroke-width="1.4" stroke-dasharray="${d}"/>`;
+      s += `<text x="${W - Dm + 4}" y="${(y(l) + 4).toFixed(1)}" font-size="11" fill="${c}">${num(l, casas)}</text>`;
+    });
+    s += `<polyline points="${Array.from(serie, (v, k) => `${x(k + 0.5).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}" fill="none" stroke="${T.corrigida}" stroke-width="1.8"/>`;
+    s += `<rect x="${Es}" y="${y0}" width="${L}" height="${alt}" fill="none" stroke="${T.eixo}"/>`;
+    s += `<text x="${Es}" y="${y0 - 6}" font-weight="bold">${esc(rot)}</text>`;
+    if (fora.length) s += `<text x="${W - Dm}" y="${y0 - 6}" text-anchor="end" font-size="11">limiar${fora.length > 1 ? 'es' : ''} ` +
+      `${fora.map(([l, nv]) => `${nv === 1 ? 'AMARELO' : 'VERMELHO'} ${num(l, casas)}`).join(' e ')}: acima da escala</text>`;
+  });
+  const yb = topo + 3 * alt + 2 * gap, mx = marcas(0, minutos ? n / 60 : n, 6);
+  mx.valores.forEach(v => s += `<text x="${x(minutos ? v * 60 : v).toFixed(1)}" y="${yb + 14}" text-anchor="middle">${num(v, 0)}</text>`);
+  s += `<text x="${Es + L / 2}" y="${yb + 30}" text-anchor="middle">Tempo (${minutos ? 'min' : 's'})</text>`;
+  let lx = Es;
+  [[1, 'limiar do AMARELO'], [2, 'limiar do VERMELHO']].filter(([nv]) => niveis.has(nv)).forEach(([nv, r]) => {
+    const [c, d] = estilo(nv);
+    s += `<line x1="${lx}" x2="${lx + 24}" y1="${yb + 46}" y2="${yb + 46}" stroke="${c}" stroke-width="1.4" stroke-dasharray="${d}"/>`;
+    s += `<text x="${lx + 30}" y="${yb + 50}" font-size="11">${r}</text>`;
+    lx += 160;
+  });
+  if (cursor) s += `<line id="ens-cursor" x1="${Es}" x2="${Es}" y1="${topo}" y2="${yb}" stroke="${T.texto}" stroke-width="1" stroke-dasharray="3 3"/>`;
+  E.graf_x = x;
   return s + '</svg>';
 }
 
@@ -693,10 +763,13 @@ function gerarEnsaio() {
       $('#ens-blocos').innerHTML = [
         [demo ? 'Travessias na demonstração' : cen === 'hora' ? 'Travessias na hora' : 'Travessias no cenário', `${E.travessias.length}`, `${E.pessoas} pessoas`],
         ['Pico no meio do vão', `${num(E.pico_g * 9.81, 2)} m/s²`, `${num(E.pico_g, 3)} g · ${E.classe} (Sétra)`],
+        ['Flecha máxima no meio do vão', `${num(Math.max(...E.serie.flecha_mm), 1)} mm`,
+          `${num(100 * Math.max(...E.serie.flecha_mm) / Motor.limitesFlechaMm(E.param)[1], 0)}% de L/${E.param.flecha.limite_razao} · EI = ${num(Motor.rigidezEI(E.param) / 1e6, 0)} MN·m²`],
         ['Pior cor do semáforo', Motor.CORES[S.pior], `VERMELHO ${S.tempo_s[2]} s, AMARELO ${S.tempo_s[1]} s`],
         ['Entradas com VERMELHO', `${S.entradas_vermelho}`, 'pessoas que o semáforo teria impedido'],
         [demo || E.cenario ? 'Primeiro modo' : 'Primeiro modo na hora', `${num(E.f1_hz, 3)} Hz`, demo || E.cenario ? `estrutura a ${num(E.temperatura_c, 1)} °C` : `ar a ${num(E.temperatura_c, 1)} °C`]
       ].map(([r, v, c]) => `<div class="bloco"><div class="rot">${esc(r)}</div><div class="val">${esc(v)}</div><div class="cmp">${esc(c)}</div></div>`).join('');
+      $('#ens-graf').innerHTML = graficosEnsaioSVG(E, TEMA_TELA, true);
       $('#ens-msg').textContent = E.cenario ? E.titulo : E.travessias.length ? '' : 'Ninguém atravessa nesta hora.';
       $('#ens-pausa').textContent = 'Pausar';
       requestAnimationFrame(quadro);
@@ -716,6 +789,8 @@ function quadro(agora) {
   ENS.ultimo = agora;
   if (agora - ENS.desenhado > 33 || !ENS.rodando) {
     $('#ens-fig').innerHTML = quadroEnsaioSVG(ENS.E, ENS.t, TEMA_TELA);
+    const cur = document.getElementById('ens-cursor');
+    if (cur && ENS.E.graf_x) { const xc = ENS.E.graf_x(ENS.t).toFixed(1); cur.setAttribute('x1', xc); cur.setAttribute('x2', xc); }
     desenharRegistro();
     ENS.desenhado = agora;
   }
@@ -817,6 +892,11 @@ $('#bt-png').addEventListener('click', () => {
   baixarPNG(figuraSVG(R, j, TEMA_CINZA), `monitoramento_${R.sensores[j].sensor_id}.png`);
 });
 $('#bt-png-fluxo').addEventListener('click', () => baixarPNG(figuraFluxoSVG(R, TEMA_CINZA), 'fluxo_por_hora.png'));
+$('#bt-png-ens').addEventListener('click', () => {
+  if (!ENS.E) return;
+  const nome = ENS.E.cenario || (ENS.E.demo ? 'demonstracao' : `dia${ENS.E.dia + 1}_${ENS.E.hora}h`);
+  baixarPNG(graficosEnsaioSVG(ENS.E, TEMA_CINZA, false), `ensaio_${nome}.png`);
+});
 $('#bt-pset').addEventListener('click', () => baixar('snapshot_ifc.json', JSON.stringify(psetIFC(), null, 2), 'application/json'));
 $('#bt-sensors').addEventListener('click', () => baixar('sensors.json', JSON.stringify(R.snapshot, null, 2), 'application/json'));
 $('#bt-csv').addEventListener('click', () => baixar('eventos.csv', Motor.csvEventos(R), 'text/csv'));

@@ -153,6 +153,27 @@ const TESTES = [
     const r = Motor.simular(base(p => { p.dano.perda_rigidez = 0.02; })), sd = r.semaforo_dia;
     const d = sd.findIndex(x => x.nivel === 2);
     return [d > r.param.dano.inicio_dia && sd.slice(d).every(x => x.nivel === 2) && r.pset_semaforo.LastColor === 'VERMELHO', `VERMELHO a partir do dia ${d + 1}`];
+  }],
+  ['Flecha: 70 kg no meio do vão com o EI das longarinas dá PL³/48EI = 0,539 mm', () => {
+    const p = base(p => { p.flecha.massa_kg_m = 0; }), L = p.vao_m;
+    const d = Motor.flechaMeioMm(p, [{ x: L / 2, peso: 70 }]), ref = 70 * 9.81 * L ** 3 / (48 * Motor.rigidezEI(p)) * 1000;
+    return [Math.abs(d - ref) < 1e-9 && Math.abs(d - 0.539) < 0.001, `${d.toFixed(4)} mm; EI = ${(Motor.rigidezEI(p) / 1e6).toFixed(1)} MN·m²`];
+  }],
+  ['EI calibrado pela massa do IFC e pela frequência do ensaio: cerca de 133 MN·m²', () => {
+    const p = base(), EI = Motor.rigidezEI(p), L = p.vao_m;
+    const f = Math.PI / 2 * Math.sqrt(EI / (p.flecha.massa_kg_m * L ** 4));   // devolve a frequência do primeiro modo
+    return [Math.abs(EI / 1e6 - 133) < 2 && Math.abs(f - p.modos[0].f_hz) < 1e-9, `${(EI / 1e6).toFixed(1)} MN·m²; f1 = ${f.toFixed(3)} Hz`];
+  }],
+  ['Multidão parada: AMARELO pela ocupação e flecha abaixo do AMARELO, sem VERMELHO', () => {
+    const e = Motor.ensaioCenario(base(), 'parada'), fMax = Math.max(...e.serie.flecha_mm), [fA] = Motor.limitesFlechaMm(e.param);
+    const am = e.semaforo.registro.filter(x => x.para === 'AMARELO');
+    return [e.semaforo.pior === 1 && am.length && am.every(x => x.causa === 'ocupação') && fMax < fA && fMax > 10,
+      `flecha máxima ${fMax.toFixed(1)} mm (AMARELO em ${fA.toFixed(1)} mm); ` + e.semaforo.registro.map(x => `${x.t_s} s ${x.para} (${x.causa})`).join('; ')];
+  }],
+  ['Multidão parada com o EI só das longarinas: a flecha passa de L/350 e acende o VERMELHO', () => {
+    const e = Motor.ensaioCenario(base(p => { p.flecha.massa_kg_m = 0; }), 'parada'), fMax = Math.max(...e.serie.flecha_mm);
+    const v = e.semaforo.registro.find(x => x.para === 'VERMELHO');
+    return [v && v.causa === 'flecha no meio do vão' && fMax > Motor.limitesFlechaMm(e.param)[1], `flecha máxima ${fMax.toFixed(1)} mm; VERMELHO aos ${v ? v.t_s : '-'} s`];
   }]
 ];
 
