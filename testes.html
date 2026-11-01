@@ -107,6 +107,52 @@ const TESTES = [
     const cenas = e.travessias.filter(c => c.rotulo).length;
     const livres = e.janelas_livres.length === cenas;   // as duas pessoas em sentidos opostos formam uma cena
     return [cenas === 5 && livres && e.dur < 120, `${e.travessias.length} travessias, ${e.pessoas} pessoas, ${e.dur} s, pico ${(e.pico_g * 9.81).toFixed(2)} m/s²`];
+  }],
+  ['N sensores: acelerômetro acrescentado recebe a amplitude pela forma do modo', () => {
+    const p = base(p => p.sensores.push({ sensor_id: 'ACC_N01', canal: '-', posicao: 'x = 3 m', posicao_m: 3 }));
+    const q = Motor.prepararSensores(JSON.parse(JSON.stringify(p))), s = q.sensores[3], L = q.vao_m;
+    const esperado = q.sensores[0].amplitudes_g[0] * Math.sin(Math.PI * 3 / L) / Math.sin(Math.PI * 5.975 / L);
+    const r = Motor.simular(p);
+    return [Math.abs(s.amplitudes_g[0] - esperado) < 1e-12 && r.sensores.length === 4 && r.pset.length === 4,
+      `${(s.amplitudes_g[0] * 1000).toFixed(2)} mg no 1º modo`];
+  }],
+  ['Semáforo: sobe na hora, desce só depois do tempo mínimo e com histerese', () => {
+    const p = base(p => { p.semaforo.pico_ms2 = [1.0, 2.5]; }), n = 200, pico = new Float64Array(n);   // limiares com VERMELHO, para testar o mecanismo
+    for (let k = 20; k < 40; k++) pico[k] = 3;        // acima do VERMELHO (2,5 m/s²)
+    for (let k = 40; k < 60; k++) pico[k] = 2.4;      // abaixo do limiar, mas dentro da histerese
+    const r = Motor.avaliarSemaforo(p, { pico_ms2: pico, sensor_pico: new Array(n).fill('ACC_MV_01'),
+      ocupacao: new Float64Array(n), sensores_ok: new Uint8Array(n).fill(3) });
+    const desce = r.registro.find(x => x.para === 'VERDE');
+    return [r.cor[19] === 0 && r.cor[20] === 2 && r.cor[59] === 2 && desce && desce.t_s === 60 + p.semaforo.tempo_vermelho_s,
+      r.registro.map(x => `${x.t_s} s ${x.para}`).join('; ')];
+  }],
+  ['Situações de alerta: VERDE até 8 pessoas, AMARELO com 12 e com a multidão, nunca VERMELHO', () => {
+    const e = Motor.ensaioCenario(base(), 'alerta'), c = e.semaforo.cor;
+    const g12 = Math.floor(e.travessias.find(x => x.pesos.length === 12).t0);
+    const mt = Math.floor(e.travessias.find(x => x.rotulo && x.rotulo.startsWith('multidão')).t0);
+    const ok = Math.max(...c.slice(0, g12)) === 0 && Math.max(...c.slice(g12, g12 + 15)) === 1 && c[mt - 1] === 0 &&
+      Math.max(...c.slice(mt)) === 1 && e.semaforo.pior === 1 && e.dur <= 130;
+    return [ok, `${e.dur} s: ` + e.semaforo.registro.map(x => `${x.t_s} s ${x.para}`).join('; ')];
+  }],
+  ['Chuva e vento, com os mesmos pedestres: AMARELO pela chuva e VERMELHO só com a multidão', () => {
+    const a = Motor.ensaioCenario(base(), 'alerta'), e = Motor.ensaioCenario(base(), 'tempestade'), reg = e.semaforo.registro;
+    const mesmos = a.travessias.length === e.travessias.length && a.travessias.every((c, i) => c.t0 === e.travessias[i].t0 && c.peso_total === e.travessias[i].peso_total);
+    const mt = Math.floor(e.travessias.find(x => x.rotulo && x.rotulo.startsWith('multidão')).t0);
+    const v = reg.filter(x => x.para === 'VERMELHO');
+    return [mesmos && reg.some(x => x.para === 'AMARELO' && x.causa === 'chuva') && v.length === 1 && v[0].t_s >= mt && v[0].aviso === 'gestor avisado',
+      reg.filter(x => x.tipo === 'semáforo').map(x => `${x.t_s} s ${x.para} (${x.causa})`).join('; ')];
+  }],
+  ['Cenário falha: um ou dois sensores parados não mudam a cor; todos parados, AMARELO até o fim', () => {
+    const e = Motor.ensaioCenario(base(), 'falha'), c = e.semaforo.cor;   // param em 15 s, 35 s e todos em 60 s
+    const g12 = Math.floor(e.travessias.find(x => x.pesos.length === 12).t0);
+    const avisos = e.semaforo.registro.filter(x => x.tipo === 'aviso').map(x => x.aviso);
+    return [Math.max(...c.slice(15, g12)) === 0 && Math.min(...c.slice(60)) >= 1 && Math.max(...c) < 2 &&
+      avisos.join() === 'manutenção avisada,manutenção avisada,gestor avisado', avisos.join('; ')];
+  }],
+  ['Semáforo diário: ALERTA da perda de rigidez acende o VERMELHO e ele fica', () => {
+    const r = Motor.simular(base(p => { p.dano.perda_rigidez = 0.02; })), sd = r.semaforo_dia;
+    const d = sd.findIndex(x => x.nivel === 2);
+    return [d > r.param.dano.inicio_dia && sd.slice(d).every(x => x.nivel === 2) && r.pset_semaforo.LastColor === 'VERMELHO', `VERMELHO a partir do dia ${d + 1}`];
   }]
 ];
 

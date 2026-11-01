@@ -42,17 +42,19 @@
     dias: 60,
     dias_baseline: 14,
     vao_m: 11.95,                 // comprimento das vigas no modelo IFC
+    largura_m: 1.70,              // largura da chapa de piso no modelo IFC (área útil de 20,3 m²)
     aquisicao: { fs_hz: 1000, janela_s: 4.1, f_max_hz: 50 },
     medicoes_max_por_hora: 1,     // trechos de vibração livre analisados por hora
-    // calibrados pelo ensaio (trecho de vibração livre de 402,4 a 406,5 s)
+    // calibrados pelo ensaio (trecho de vibração livre de 402,4 a 406,5 s); posicao_m: distância ao apoio.
+    // Sensores acrescentados sem amplitudes_g recebem a amplitude pela forma do modo (prepararSensores).
     modos: [
       { f_hz: 7.93457, amortecimento: 0.01468 },
       { f_hz: 9.765625, amortecimento: 0.01066 }
     ],
     sensores: [
-      { sensor_id: 'ACC_MV_01', canal: 'A1272_18A', posicao: 'Meio do vão', amplitudes_g: [0.04988, 0.01969] },
-      { sensor_id: 'ACC_QV_01', canal: 'A1274_18A', posicao: '1/4 do vão', amplitudes_g: [0.02930, 0.01155] },
-      { sensor_id: 'ACC_AP_01', canal: 'A1275_18A', posicao: 'Apoio', amplitudes_g: [0.00121, 0.00051] }
+      { sensor_id: 'ACC_MV_01', canal: 'A1272_18A', posicao: 'Meio do vão', posicao_m: 5.975, amplitudes_g: [0.04988, 0.01969] },
+      { sensor_id: 'ACC_QV_01', canal: 'A1274_18A', posicao: '1/4 do vão', posicao_m: 2.99, amplitudes_g: [0.02930, 0.01155] },
+      { sensor_id: 'ACC_AP_01', canal: 'A1275_18A', posicao: 'Apoio', posicao_m: 0.36, amplitudes_g: [0.00121, 0.00051] }
     ],
     f_mef_hz: 6.91394,
     fluxo: {
@@ -62,7 +64,8 @@
       grupo_extra_pico: 2.0,       // idem, na hora de maior fluxo
       peso_medio_kg: 70, peso_desvio_kg: 12,
       passo_hz: [1.6, 2.2], comprimento_passo_m: 0.7,
-      intervalo_grupo_s: 0.6,      // distância, em tempo, entre pessoas do mesmo grupo
+      intervalo_grupo_s: 0.6,      // distância, em tempo, entre fileiras do mesmo grupo
+      lado_a_lado_max: 4,          // pessoas lado a lado numa fileira (largura de 1,70 m)
       pico_1_pessoa_g: 0.08        // aceleração de pico no meio do vão com uma pessoa (estimada)
     },
     ruido_g: 0.0003,
@@ -74,10 +77,42 @@
       coef_por_c: -0.001           // cerca de -0,1% por °C (Moser e Moaveni, 2011)
     },
     dano: { inicio_dia: 40, fim_dia: 50, perda_rigidez: 0.01 },
-    criterio: { k_atencao: 2, k_alerta: 3, persistencia_dias: 2, interpolacao: true }
+    criterio: { k_atencao: 2, k_alerta: 3, persistencia_dias: 2, interpolacao: true },
+    // Semáforo nas cabeceiras: limiares [AMARELO, VERMELHO]; null = sem esse nível. Pedestres sozinhos
+    // acendem no máximo o AMARELO (abuso); o VERMELHO vem do vento forte, da ocupação com chuva ou vento
+    // e da estrutura. Valores de referência, a confirmar com o grupo de estruturas.
+    semaforo: {
+      pico_ms2: [2.5, null],       // aceleração de pico (limite de desconforto do Sétra)
+      ocupacao_pm2: [0.5, null],   // pessoas por m² (densidade de referência do Sétra)
+      ocupacao_clima_pm2: 0.75,    // VERMELHO da ocupação com chuva ou vento em AMARELO (hipotético)
+      chuva_mmh: [10, null],       // hipotético
+      vento_ms: [15, 20],          // hipotético
+      histerese: 0.1,              // a cor só baixa com o valor 10% abaixo do limiar...
+      tempo_amarelo_s: 10,         // ...por este tempo, para sair do AMARELO
+      tempo_vermelho_s: 20         // ...e por este, para sair do VERMELHO
+    },
+    // Cenários hipotéticos do ensaio virtual
+    cenarios: {
+      multidao_pessoas: 25, multidao_chegada_s: 15,
+      chuva_max_mmh: 30, vento_max_ms: 18
+    }
   };
 
   const ESTADOS = ['BASELINE', 'NORMAL', 'ATENÇÃO', 'ALERTA'];
+  const CORES = ['VERDE', 'AMARELO', 'VERMELHO'];
+
+  // Sensores sem amplitude medida: amplitude do sensor de referência (o primeiro, no meio do vão)
+  // vezes a razão das formas do 1º modo, sen(πx/L). A forma do 2º modo não foi medida; usa-se a mesma.
+  function prepararSensores(p) {
+    const ref = p.sensores[0], L = p.vao_m, fRef = Math.sin(Math.PI * ref.posicao_m / L);
+    p.sensores.forEach(s => {
+      if (!s.amplitudes_g) {
+        const f = Math.sin(Math.PI * Math.min(Math.max(s.posicao_m, 0), L) / L) / fRef;
+        s.amplitudes_g = ref.amplitudes_g.map(a => a * f);
+      }
+    });
+    return p;
+  }
 
   // ---------------------------------------------------------------------------
   // Números aleatórios (mulberry32 + Box-Muller)
@@ -204,13 +239,31 @@
       const pesos = [];
       for (let k = 0; k < pessoas; k++) pesos.push(Math.max(35, F.peso_medio_kg + F.peso_desvio_kg * rng.normal()));
       const passo = F.passo_hz[0] + (F.passo_hz[1] - F.passo_hz[0]) * rng.u();
-      const v = passo * F.comprimento_passo_m;
-      const t0 = 3600 * rng.u();
-      const duracao = p.vao_m / v + (pessoas - 1) * F.intervalo_grupo_s;
-      lista.push({ t0, fim: t0 + duracao, pesos, peso_total: pesos.reduce((s, x) => s + x, 0),
-        passo_hz: passo, v_ms: v, sentido: rng.u() < 0.5 ? 1 : -1 });
+      const t0 = 3600 * rng.u(), sentido = rng.u() < 0.5 ? 1 : -1;
+      lista.push(travessia(p, t0, pesos, passo, sentido, p.semente * 7919 + h * 104729 + i * 31 + 17));
     }
     return lista.sort((a, b) => a.t0 - b.t0);
+  }
+
+  // Uma travessia (grupo). O grupo anda em fileiras de 2 a lado_a_lado_max pessoas (a largura permite
+  // até 4), separadas por intervalo_grupo_s; na mesma fileira, cada pessoa tem um atraso próprio de até
+  // 0,3 s, para os passos não ficarem em fase. A passada varia ±15% entre grupos (velocidades
+  // diferentes). Sorteio próprio (semente), para não alterar os demais sorteios.
+  // porFileira: força o número de pessoas lado a lado (usado nas cenas roteirizadas).
+  function travessia(p, t0, pesos, passo, sentido, semente, rotulo, porFileira) {
+    const F = p.fluxo, r = gerador(semente >>> 0), n = pesos.length;
+    const max = Math.max(1, Math.round(F.lado_a_lado_max || 1));
+    const sorteio = n === 1 || max === 1 ? 1 : Math.min(n, 2 + Math.floor(r.u() * (max - 1)));
+    const largura = porFileira ? Math.min(n, porFileira, max) : sorteio;
+    const atrasos = [], faixas = [];
+    for (let k = 0; k < n; k++) {
+      const faixa = k % largura;
+      atrasos.push(Math.floor(k / largura) * F.intervalo_grupo_s + (faixa ? 0.3 * r.u() : 0));
+      faixas.push(faixa);
+    }
+    const v = passo * F.comprimento_passo_m * (0.85 + 0.3 * r.u());
+    return { t0, fim: t0 + p.vao_m / v + Math.max(...atrasos), pesos, peso_total: pesos.reduce((s, x) => s + x, 0),
+      passo_hz: passo, v_ms: v, sentido, atrasos, faixas, rotulo };
   }
 
   // Trechos de vibração livre: a passarela fica vazia por pelo menos uma janela após a travessia.
@@ -329,7 +382,7 @@
   // Simulação do monitoramento contínuo
   // ---------------------------------------------------------------------------
   function simular(param) {
-    const p = JSON.parse(JSON.stringify(param || PARAM_PADRAO));
+    const p = prepararSensores(JSON.parse(JSON.stringify(param || PARAM_PADRAO)));
     const rng = gerador(p.semente);
     const fs = p.aquisicao.fs_hz, nS = p.sensores.length, nH = p.dias * 24;
     const temp = temperaturas(p, rng);
@@ -457,7 +510,31 @@
       })
     };
 
-    return { param: p, sensores: sens, temperatura_ar: temp.ar, pset, volume, fluxo, snapshot };
+    const res = { param: p, sensores: sens, temperatura_ar: temp.ar, pset, volume, fluxo, snapshot };
+    res.semaforo_dia = semaforoDiario(res);
+    const cD = res.semaforo_dia[p.dias - 1];
+    res.pset_semaforo = {
+      Semaforo_ID: 'SEM_CABECEIRAS', LastColor: CORES[cD.nivel], LastCause: cD.causa, LastUpdate: `dia ${p.dias}`
+    };
+    return res;
+  }
+
+  // Semáforo pela estrutura, dia a dia: estado diário com compensação do dia anterior (a média do dia
+  // só fecha no fim do dia), o pior entre os sensores. ATENÇÃO -> AMARELO; ALERTA -> VERMELHO, que só
+  // o gestor libera, depois da inspeção (no simulador, fica até o fim).
+  function semaforoDiario(res) {
+    const D = res.param.dias, saida = [{ nivel: 0, causa: '' }];
+    let travado = null;
+    for (let d = 1; d < D; d++) {
+      let nivel = 0, causa = '';
+      res.sensores.forEach(r => {
+        const e = r.com.estado[d - 1], n = e === 'ALERTA' ? 2 : e === 'ATENÇÃO' ? 1 : 0;
+        if (n > nivel) { nivel = n; causa = `${e} da frequência em ${r.sensor_id} (dia ${d})`; }
+      });
+      if (nivel === 2 && !travado) travado = causa;
+      saida.push(travado ? { nivel: 2, causa: travado + '; aguarda inspeção' } : { nivel, causa });
+    }
+    return saida;
   }
 
   // ---------------------------------------------------------------------------
@@ -481,7 +558,7 @@
     });
     for (const c of travessias) {
       c.pesos.forEach((peso, k) => {
-        const tIni = c.t0 + k * F.intervalo_grupo_s, dt = 1 / c.passo_hz;
+        const tIni = c.t0 + c.atrasos[k], dt = 1 / c.passo_hz;
         for (let t = tIni; ; t += dt) {
           const xr = c.v_ms * (t - tIni);
           if (xr > L) break;
@@ -506,7 +583,7 @@
     const chave = JSON.stringify([p.modos, p.sensores[0].amplitudes_g, p.vao_m, p.fluxo]);
     if (escalaCache && escalaCache.chave === chave) return escalaCache.k;
     const F = p.fluxo, passo = (F.passo_hz[0] + F.passo_hz[1]) / 2, v = passo * F.comprimento_passo_m;
-    const um = [{ t0: 0.5, pesos: [F.peso_medio_kg], passo_hz: passo, v_ms: v, sentido: 1 }];
+    const um = [{ t0: 0.5, pesos: [F.peso_medio_kg], passo_hz: passo, v_ms: v, sentido: 1, atrasos: [0] }];
     const a = respostaPassos(p, um, p.vao_m / v + 7, 200, 1)[0];
     let pico = 0;
     for (let i = 0; i < a.length; i++) pico = Math.max(pico, Math.abs(a[i]));
@@ -523,16 +600,9 @@
     return 'desconforto';
   }
 
-  // dia em base 0; hora de 0 a 23. fsA: amostras por segundo da animação.
-  function ensaioVirtual(param, dia, hora, fsA = 100) {
-    const p = JSON.parse(JSON.stringify(param || PARAM_PADRAO));
-    const h = dia * 24 + hora, dur = 3600;
-    const trav = fluxoHora(p, h);
-    const temp = temperaturas(p, gerador(p.semente));
-    const fatorF = fatorFrequencia(p, temp.estrutura[h], dia + hora / 24);
-    const k = escalaPassos(p);
-    const a = respostaPassos(p, trav, dur, fsA, fatorF);
-    const rng = gerador((p.semente * 31 + h) >>> 0);
+  // Resposta aos passos em escala (pico_1_pessoa_g) com ruído; pico no primeiro sensor (meio do vão).
+  function aceleracoes(p, trav, dur, fsA, fatorF, semente) {
+    const a = respostaPassos(p, trav, dur, fsA, fatorF), k = escalaPassos(p), rng = gerador(semente >>> 0);
     let pico = 0;
     a.forEach((v, s) => {
       for (let i = 0; i < v.length; i++) {
@@ -540,61 +610,348 @@
         if (s === 0) pico = Math.max(pico, Math.abs(v[i]));
       }
     });
+    return { a, pico };
+  }
+
+  // dia em base 0; hora de 0 a 23. fsA: amostras por segundo da animação.
+  // opc.estrutura: nível do semáforo pela estrutura (0, 1, 2) no dia; opc.est: estado do semáforo
+  // ao fim da hora anterior, para encadear horas.
+  function ensaioVirtual(param, dia, hora, fsA = 100, opc = {}) {
+    const p = prepararSensores(JSON.parse(JSON.stringify(param || PARAM_PADRAO)));
+    const h = dia * 24 + hora, dur = 3600;
+    const trav = fluxoHora(p, h);
+    const temp = temperaturas(p, gerador(p.semente));
+    const fatorF = fatorFrequencia(p, temp.estrutura[h], dia + hora / 24);
+    const { a, pico } = aceleracoes(p, trav, dur, fsA, fatorF, p.semente * 31 + h);
     const janelas = janelasLivres(p, trav);
-    return {
+    const E = {
       param: p, dia, hora, fs: fsA, dur, aceleracao: a, travessias: trav,
       janelas_livres: janelas.map(j => j.t), medidas: janelas.slice(0, p.medicoes_max_por_hora).map(j => j.t),
       pessoas: trav.reduce((s, c) => s + c.pesos.length, 0),
       pico_g: pico, classe: classeSetra(pico),
       f1_hz: p.modos[0].f_hz * fatorF, temperatura_c: temp.ar[h]
     };
+    aplicarSemaforo(E, { estrutura: opc.estrutura || 0, causa_estrutura: opc.causa_estrutura, est: opc.est, t0: hora * 3600 });
+    return E;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Semáforo nas cabeceiras
+  // ---------------------------------------------------------------------------
+  const REGRAS = [
+    { chave: 'pico', nome: 'pico de aceleração', un: 'm/s²', lim: S => S.pico_ms2 },
+    { chave: 'ocupacao', nome: 'ocupação', un: 'pessoas/m²', lim: S => S.ocupacao_pm2 },
+    { chave: 'chuva', nome: 'chuva', un: 'mm/h', lim: S => S.chuva_mmh },
+    { chave: 'vento', nome: 'vento', un: 'm/s', lim: S => S.vento_ms }
+  ];
+  const ativo = v => v !== null && v !== undefined && v > 0;
+  // Nível (0, 1, 2) de um valor frente aos limiares [AMARELO, VERMELHO], multiplicados por f.
+  const nivelDe = (v, lim, f = 1) => (ativo(lim[1]) && v > lim[1] * f) ? 2 : (ativo(lim[0]) && v > lim[0] * f) ? 1 : 0;
+
+  // Séries por segundo para o semáforo: pico de |a| nos sensores com dados, pessoas sobre a passarela,
+  // sensores com dados. falhas: [{ j (índice do sensor; -1 = todos), t0, t1 }].
+  function seriesPorSegundo(E, falhas = []) {
+    const n = Math.floor(E.dur), fs = E.fs, ids = E.param.sensores.map(s => s.sensor_id);
+    const falho = (j, t) => falhas.some(f => (f.j === -1 || f.j === j) && t >= f.t0 && t < f.t1);
+    const pico = new Float64Array(n), sensor = new Array(n), ocup = new Float64Array(n), ok = new Uint8Array(n);
+    for (let k = 0; k < n; k++) {
+      let m = 0, js = -1, nOk = 0;
+      E.aceleracao.forEach((a, j) => {
+        if (falho(j, k)) return;
+        nOk++;
+        for (let i = k * fs; i < (k + 1) * fs && i < a.length; i++) { const v = Math.abs(a[i]); if (v > m) { m = v; js = j; } }
+      });
+      pico[k] = m * 9.81; sensor[k] = js >= 0 ? ids[js] : ''; ok[k] = nOk;
+      ocup[k] = pessoasNoInstante(E, k + 0.5).length;
+    }
+    return { pico_ms2: pico, sensor_pico: sensor, ocupacao: ocup, sensores_ok: ok };
+  }
+
+  // Avalia o semáforo segundo a segundo. Cada regra sobe na hora e só desce depois de tempo_amarelo_s
+  // (saindo do AMARELO) ou tempo_vermelho_s (saindo do VERMELHO) com o valor abaixo do limiar menos
+  // a histerese. Estrutura (estado diário) e monitoramento indisponível (nenhum sensor com dados:
+  // AMARELO) entram como regras. Com chuva ou vento em AMARELO (piso molhado, vento), o VERMELHO da
+  // ocupação baixa para ocupacao_clima_pm2. O semáforo mostra a pior cor.
+  function avaliarSemaforo(p, ent, est) {
+    const S = p.semaforo, area = p.vao_m * p.largura_m, n = ent.pico_ms2.length, t0 = ent.t0 || 0;
+    est = est || { nivel: {}, abaixo: {}, cor: null };
+    const cor = new Uint8Array(n), registro = [];
+    for (let k = 0; k < n; k++) {
+      const t = t0 + k;
+      const v = { pico: ent.pico_ms2[k], ocupacao: ent.ocupacao[k] / area,
+        chuva: ent.chuva ? ent.chuva[k] : 0, vento: ent.vento ? ent.vento[k] : 0 };
+      let pior = ent.estrutura || 0;
+      let causa = pior ? { nome: ent.causa_estrutura || 'estado diário da frequência', valor: '', limiar: '', un: '' } : null;
+      if (ent.sensores_ok[k] === 0 && pior < 1) { pior = 1; causa = { nome: 'monitoramento indisponível', valor: '', limiar: '', un: '' }; }
+      // com chuva ou vento em AMARELO (no segundo anterior), o VERMELHO da ocupação baixa para ocupacao_clima_pm2
+      const clima = est.nivel.chuva ? 'chuva' : est.nivel.vento ? 'vento' : '';
+      for (const r of REGRAS) {
+        let lim = r.lim(S), nome = r.nome;
+        if (r.chave === 'ocupacao' && clima && ativo(S.ocupacao_clima_pm2)) { lim = [lim[0], S.ocupacao_clima_pm2]; nome = `ocupação com ${clima}`; }
+        const atual = est.nivel[r.chave] || 0;
+        const sobe = nivelDe(v[r.chave], lim), desce = nivelDe(v[r.chave], lim, 1 - S.histerese);
+        let nv = atual;
+        if (sobe > atual) { nv = sobe; est.abaixo[r.chave] = null; }
+        else if (desce < atual) {
+          if (est.abaixo[r.chave] == null) est.abaixo[r.chave] = t;
+          if (t - est.abaixo[r.chave] >= (atual === 2 ? S.tempo_vermelho_s : S.tempo_amarelo_s)) { nv = desce; est.abaixo[r.chave] = null; }
+        } else est.abaixo[r.chave] = null;
+        est.nivel[r.chave] = nv;
+        if (nv > pior) { pior = nv; causa = { nome, valor: +v[r.chave].toFixed(2), limiar: lim[nv - 1], un: r.un, regra: r.chave }; }
+      }
+      if (pior !== est.cor && !(est.cor === null && pior === 0)) {
+        registro.push({
+          t_s: t, tipo: 'semáforo', de: est.cor === null ? '' : CORES[est.cor], para: CORES[pior],
+          causa: causa ? causa.nome : 'valores abaixo dos limiares', valor: causa ? causa.valor : '',
+          limiar: causa ? causa.limiar : '', unidade: causa ? causa.un : '',
+          sensor_id: causa && causa.regra === 'pico' ? ent.sensor_pico[k] : '', pessoas: ent.ocupacao[k],
+          aviso: pior === 2 ? 'gestor avisado' : ''
+        });
+      }
+      est.cor = pior; cor[k] = pior;
+    }
+    return { cor, registro, est };
+  }
+
+  // Calcula o semáforo de um ensaio e os indicadores: tempo em cada cor, primeira vez em cada cor e
+  // pessoas que entraram com VERMELHO (o semáforo as teria impedido; no simulador ninguém obedece).
+  function aplicarSemaforo(E, opc = {}) {
+    const ent = seriesPorSegundo(E, opc.falhas);
+    Object.assign(ent, { chuva: opc.ambiente && opc.ambiente.chuva, vento: opc.ambiente && opc.ambiente.vento,
+      estrutura: opc.estrutura || 0, causa_estrutura: opc.causa_estrutura, t0: opc.t0 || 0 });
+    const r = avaliarSemaforo(E.param, ent, opc.est);
+    const avisos = (opc.avisos || []).map(a => ({ t_s: (opc.t0 || 0) + a.t, tipo: 'aviso', de: '', para: '', causa: a.texto,
+      valor: '', limiar: '', unidade: '', sensor_id: a.sensor_id || '', pessoas: ent.ocupacao[Math.min(a.t, ent.ocupacao.length - 1)], aviso: a.para }));
+    const tempo = [0, 0, 0], primeiro = [null, null, null];
+    r.cor.forEach((c, k) => { tempo[c]++; if (primeiro[c] === null) primeiro[c] = k; });
+    let entradas = 0;
+    E.travessias.forEach(c => c.pesos.forEach((_, k) => {
+      const t = Math.floor(c.t0 + c.atrasos[k]);
+      if (r.cor[t] === 2) entradas++;
+    }));
+    E.serie = ent;
+    E.semaforo = { cor: r.cor, est: r.est, registro: r.registro.concat(avisos).sort((a, b) => a.t_s - b.t_s),
+      tempo_s: tempo, primeiro_s: primeiro, entradas_vermelho: entradas, pior: tempo[2] ? 2 : tempo[1] ? 1 : 0 };
+    E.ambiente = opc.ambiente || null;
+    E.falhas = opc.falhas || [];
+    E.t0_s = opc.t0 || 0;          // instante do registro correspondente a t = 0 do ensaio
+    return E;
+  }
+
+  // Pedestres dos cenários "situações de alerta" e "chuva e vento" (os mesmos nos dois, cerca de 2 min):
+  // grupos cada vez maiores. Até 8 pessoas, VERDE; 12 pessoas juntas passam de 0,5 pessoa/m² (AMARELO);
+  // depois de o semáforo voltar ao VERDE, uma multidão, que sozinha também fica no AMARELO. Ritmos de
+  // passo longe de 7,93/4 = 1,98 Hz, para não excitar o modo por ressonância.
+  const CENAS_ALERTA = [
+    { t0: 2, rotulo: 'uma pessoa', n: 1, passo_hz: 1.8, sentido: 1 },
+    { t0: 14, rotulo: 'duas pessoas lado a lado', n: 2, passo_hz: 1.7, sentido: -1, fileira: 2 },
+    { t0: 27, rotulo: 'grupo de oito pessoas, em fila', n: 8, passo_hz: 1.75, sentido: 1, fileira: 1 },
+    { t0: 42, rotulo: 'grupo de doze pessoas, de três em três', n: 12, passo_hz: 1.75, sentido: -1, fileira: 3 }
+  ];
+
+  // Falha de sensor: um sensor para em 15 s, outro em 35 s e todos em 60 s (até o fim).
+  const FALHA_S = [15, 35, 60];
+
+  // Cenários hipotéticos para gerar alarmes: 'alerta' (situações de alerta), 'tempestade' e 'falha'.
+  function ensaioCenario(param, nome, fsA = 100) {
+    const p = prepararSensores(JSON.parse(JSON.stringify(param || PARAM_PADRAO))), F = p.fluxo, C = p.cenarios;
+    const rng = gerador((p.semente * 13 + nome.charCodeAt(0)) >>> 0);
+    const trav = [], opc = { avisos: [] };
+    let dur, marco, titulo;
+    if (nome === 'alerta' || nome === 'tempestade' || nome === 'falha') {
+      // mesmos pedestres nos dois cenários: sorteio próprio, que não depende do cenário
+      const rp = gerador((p.semente * 13 + 500) >>> 0);
+      const peso = () => Math.max(35, F.peso_medio_kg + F.peso_desvio_kg * rp.normal());
+      let ns = 0;
+      const semente = () => p.semente * 13 + 1000 + 7 * ns++;
+      CENAS_ALERTA.forEach(c => trav.push(travessia(p, c.t0, Array.from({ length: c.n }, peso), c.passo_hz, c.sentido, semente(), c.rotulo, c.fileira || 1)));
+      // multidão depois de o semáforo voltar ao VERDE: saída das 12 pessoas mais o tempo para sair do
+      // AMARELO. Cada pessoa entra sozinha; numa multidão anda-se mais devagar (passo de 1,6 a 1,85 Hz).
+      marco = Math.ceil(trav[trav.length - 1].fim + p.semaforo.tempo_amarelo_s + 5);
+      for (let i = 0; i < C.multidao_pessoas; i++) {
+        const t0 = i === 0 ? marco : marco + C.multidao_chegada_s * rp.u(), passo = 1.6 + 0.25 * rp.u();
+        trav.push(travessia(p, t0, [peso()], passo, rp.u() < 0.5 ? 1 : -1, semente(),
+          i === 0 ? `multidão: ${C.multidao_pessoas} pessoas em ${C.multidao_chegada_s} s` : undefined));
+      }
+      const saida = Math.max(...trav.map(c => c.fim));
+      dur = Math.ceil(saida + p.semaforo.tempo_vermelho_s + 5);
+      titulo = `situações de alerta: grupos cada vez maiores e, no fim, ${C.multidao_pessoas} pessoas em ${C.multidao_chegada_s} s`;
+      if (nome === 'tempestade') {
+        // mesmos pedestres, com chuva (sobe de 5 s a 30 s) e vento (de 30 s a 55 s, com rajadas) até a
+        // multidão sair; sozinhos, chuva e vento dão AMARELO; com a passarela carregada, VERMELHO
+        titulo = `os mesmos pedestres, com chuva até ${C.chuva_max_mmh} mm/h e vento até ${C.vento_max_ms} m/s`;
+        marco = 5;
+        const fim = saida, rampa = (u, a, b) => u < a ? 0 : u < b ? (u - a) / (b - a) : u < fim ? 1 : u < fim + 5 ? (fim + 5 - u) / 5 : 0;
+        const chuva = new Float64Array(dur), vento = new Float64Array(dur);
+        for (let k = 0; k < dur; k++) {
+          chuva[k] = C.chuva_max_mmh * rampa(k, 5, 30);
+          const rajada = Math.min(1.1, Math.max(0.9, 1 + 0.05 * rng.normal()));   // ±10% no máximo
+          vento[k] = C.vento_max_ms * rampa(k, 30, 55) * rajada;
+        }
+        opc.ambiente = { chuva, vento };
+      }
+      if (nome === 'falha') {
+        // mesmos pedestres; os sensores param um a um, do último ao primeiro (o do meio do vão é o último
+        // a parar). Com um ou dois parados, a cor não muda e a manutenção é avisada; sem nenhum, AMARELO
+        // até o fim.
+        const [f1, f2, f3] = FALHA_S, n = p.sensores.length, ids = p.sensores.map(s => s.sensor_id);
+        marco = f3; titulo = 'os mesmos pedestres; os sensores param um a um';
+        opc.falhas = [];
+        [f1, f2].forEach((t, i) => {
+          const j = n - 1 - i;
+          if (j < 1) return;
+          opc.falhas.push({ j, t0: t, t1: dur });
+          opc.avisos.push({ t, texto: `${ids[j]} sem dados`, sensor_id: ids[j], para: 'manutenção avisada' });
+        });
+        opc.falhas.push({ j: -1, t0: f3, t1: dur });
+        opc.avisos.push({ t: f3, texto: 'todos os sensores sem dados', para: 'gestor avisado' });
+      }
+    } else throw new Error('cenário desconhecido: ' + nome);
+    trav.sort((a, b) => a.t0 - b.t0);
+    const { a, pico } = aceleracoes(p, trav, dur, fsA, 1, p.semente * 31 + 11);
+    // sensor em falha não envia dados (aparece zerado na animação)
+    (opc.falhas || []).forEach(f => a.forEach((v, j) => {
+      if (f.j === -1 || f.j === j) for (let i = f.t0 * fsA; i < Math.min(v.length, f.t1 * fsA); i++) v[i] = 0;
+    }));
+    const E = {
+      param: p, cenario: nome, titulo, marco_s: marco, dia: 0, hora: 0, fs: fsA, dur, aceleracao: a, travessias: trav,
+      janelas_livres: [], medidas: [], pessoas: trav.length,
+      pico_g: pico, classe: classeSetra(pico), f1_hz: p.modos[0].f_hz, temperatura_c: p.temperatura.ref_c
+    };
+    return aplicarSemaforo(E, opc);
+  }
+
+  // Ensaios de alarme E1 a E5. res: resultado de simular() com os mesmos parâmetros (E4 usa o
+  // semáforo diário pela estrutura). Devolve uma linha por ensaio e o registro de todos.
+  function ensaiosAlarme(param, res) {
+    const p = param || PARAM_PADRAO, linhas = [], registro = [];
+    const corTxt = c => CORES[c];
+    const mmss = s => s === null ? '-' : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s`;
+    const juntar = (id, E) => E.semaforo.registro.forEach(r => registro.push(Object.assign({ ensaio: id }, r)));
+
+    // E1: dia normal (dia 1), hora a hora, com o semáforo encadeado entre as horas
+    let est = null;
+    const tempo = [0, 0, 0], troca = [0, 0, 0];
+    let entradas = 0;
+    for (let h = 0; h < 24; h++) {
+      const E = ensaioVirtual(p, 0, h, 100, { est });
+      est = E.semaforo.est;
+      E.semaforo.tempo_s.forEach((s, c) => tempo[c] += s);
+      E.semaforo.registro.forEach(r => { if (r.tipo === 'semáforo') troca[CORES.indexOf(r.para)]++; });
+      entradas += E.semaforo.entradas_vermelho;
+      juntar('E1', E);
+    }
+    const pct = c => `${(100 * tempo[c] / 86400).toFixed(1)}%`;
+    linhas.push({ id: 'E1', cenario: 'Dia normal (24 h, fluxo do dia 1)', esperado: 'VERDE',
+      obtido: tempo[2] ? 'VERMELHO' : tempo[1] ? 'AMARELO' : 'VERDE',
+      reacao: '-', detalhe: `VERDE ${pct(0)}, AMARELO ${pct(1)}, VERMELHO ${pct(2)} do dia; ` +
+        `${troca[1]} vezes AMARELO e ${troca[2]} vezes VERMELHO; ${entradas} entradas com VERMELHO` });
+
+    // E2, E3, E5: cenários hipotéticos
+    const cen = (id, nome, esperado, txtReacao) => {
+      const E = ensaioCenario(p, nome);
+      juntar(id, E);
+      linhas.push({ id, cenario: E.titulo, esperado, obtido: corTxt(E.semaforo.pior), reacao: txtReacao(E), detalhe: '' });
+      return E;
+    };
+    // E2 e E3: os mesmos pedestres, sem e com chuva e vento. Pior cor em cada trecho: grupos de 1 a 8
+    // pessoas, grupo de 12 e multidão.
+    const area = p.vao_m * p.largura_m, g12 = CENAS_ALERTA[3].t0;
+    const trechos = E => {
+      const pior = (t0, t1) => corTxt(Math.max(...E.semaforo.cor.slice(t0, t1)));
+      const mt = E.travessias.find(c => c.rotulo && c.rotulo.startsWith('multidão')).t0;
+      return `${pior(0, g12)} até 8 pessoas; ${pior(g12, g12 + 20)} com 12; ${pior(Math.floor(mt), Math.floor(mt) + p.cenarios.multidao_chegada_s + 10)} com a multidão`;
+    };
+    const ocupMax = E => { let m = 0; E.serie.ocupacao.forEach(o => m = Math.max(m, o)); return m; };
+    const E2 = cen('E2', 'alerta', 'VERDE até 8 pessoas; AMARELO com 12; AMARELO com a multidão', E => `AMARELO aos ${mmss(E.semaforo.primeiro_s[1])}`);
+    linhas[linhas.length - 1].obtido = trechos(E2);
+    linhas[linhas.length - 1].detalhe = `até ${ocupMax(E2)} pessoas sobre a passarela (${(ocupMax(E2) / area).toFixed(2)} por m²); ` +
+      `pico de ${(E2.pico_g * 9.81).toFixed(2)} m/s²; nenhum VERMELHO`;
+    const E3 = cen('E3', 'tempestade', 'AMARELO pela chuva; VERMELHO só com a multidão', E => {
+      const a = E.semaforo.registro.find(r => r.para === 'AMARELO'), v = E.semaforo.registro.find(r => r.para === 'VERMELHO');
+      return `AMARELO (${a ? a.causa : '-'}) aos ${a ? mmss(a.t_s) : '-'}; VERMELHO ${v ? `(${v.causa}) aos ${mmss(v.t_s)}` : 'não ocorreu'}`;
+    });
+    linhas[linhas.length - 1].obtido = trechos(E3);
+    linhas[linhas.length - 1].detalhe = `os mesmos pedestres do E2; com chuva ou vento, o VERMELHO da ocupação baixa para ` +
+      `${p.semaforo.ocupacao_clima_pm2} pessoa/m²; ${E3.semaforo.entradas_vermelho} entradas com VERMELHO`;
+
+    // E4: perda de rigidez, pelo semáforo diário da simulação de 60 dias
+    if (res) {
+      const sd = res.semaforo_dia, ini = Math.floor(p.dano.inicio_dia), nb = p.dias_baseline;
+      let am = null, vm = null, falsoAm = 0, falsoVm = 0;
+      sd.forEach((c, d) => {
+        if (d >= nb + 1 && d < ini) { if (c.nivel === 1) falsoAm++; if (c.nivel === 2) falsoVm++; }
+        if (d >= ini) { if (am === null && c.nivel >= 1) am = d; if (vm === null && c.nivel === 2) vm = d; }
+      });
+      const dd = d => d === null ? 'não ocorreu' : `${d - ini} dias`;
+      linhas.push({ id: 'E4', cenario: `Perda de rigidez de ${(100 * p.dano.perda_rigidez).toFixed(1)}% a partir do dia ${p.dano.inicio_dia}`,
+        esperado: 'AMARELO e VERMELHO', obtido: corTxt(Math.max(...sd.slice(ini).map(c => c.nivel), 0)),
+        reacao: `AMARELO ${dd(am)}, VERMELHO ${dd(vm)} após o início`,
+        detalhe: `antes da perda: ${falsoAm} dias AMARELO e ${falsoVm} dias VERMELHO; o VERMELHO fica até o gestor liberar` });
+      sd.forEach((c, d) => {
+        if (d > 0 && c.nivel !== sd[d - 1].nivel) registro.push({ ensaio: 'E4', t_s: d * 86400, tipo: 'semáforo',
+          de: CORES[sd[d - 1].nivel], para: CORES[c.nivel], causa: c.causa || 'estado diário NORMAL', valor: '', limiar: '',
+          unidade: '', sensor_id: '', pessoas: '', aviso: c.nivel === 2 ? 'gestor avisado' : '' });
+      });
+    }
+
+    // E5: mesmos pedestres; até o grupo de 12, só passam grupos que ficam no VERDE
+    const E5 = cen('E5', 'falha', 'VERDE com um e com dois sensores parados; AMARELO sem nenhum sensor', E =>
+      Math.min(...E.semaforo.cor.slice(FALHA_S[2])) >= 1 ? `AMARELO desde a perda do último sensor (${mmss(FALHA_S[2])}) até o fim` : 'o AMARELO não se manteve');
+    const cor = E5.semaforo.cor, [f1, f2, f3] = FALHA_S;
+    linhas[linhas.length - 1].obtido = `${corTxt(Math.max(...cor.slice(f1, f2)))} com um sensor parado; ${corTxt(Math.max(...cor.slice(f2, g12)))} com dois; ` +
+      `${corTxt(Math.min(...cor.slice(f3)))} sem nenhum, até o fim`;
+    linhas[linhas.length - 1].detalhe = 'sensor parado: manutenção avisada; todos parados: gestor avisado';
+    linhas.sort((a, b) => a.id.localeCompare(b.id));
+    return { linhas, registro };
+  }
+
+  // CSV do registro de alarmes dos ensaios
+  function csvAlarmes(ens) {
+    const hms = s => s === '' ? '' : [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60].map(v => String(v).padStart(2, '0')).join(':');
+    const linhas = ['ensaio;instante;tipo;de;para;causa;valor;limiar;unidade;sensor_id;pessoas;aviso'];
+    ens.registro.forEach(r => linhas.push([r.ensaio, r.ensaio === 'E4' ? `dia ${r.t_s / 86400 + 1}` : hms(r.t_s), r.tipo, r.de, r.para,
+      r.causa, r.valor, r.limiar, r.unidade, r.sensor_id, r.pessoas, r.aviso].join(';')));
+    return linhas.join('\n') + '\n';
   }
 
   // Demonstração: sequência curta de grupos típicos, para quem vê a animação pela primeira vez.
+  // Uso normal, sem alertas: no máximo quatro pessoas ao mesmo tempo (grupos maiores ficam nos cenários
+  // de alerta). Cada cena termina com a passarela vazia por uma janela de medição (vibração livre).
   const CENAS_DEMO = [
     { t0: 2, rotulo: 'uma pessoa', pesos: [70], passo_hz: 1.8, sentido: 1 },
-    { t0: 21, rotulo: 'duas pessoas juntas', pesos: [62, 84], passo_hz: 1.7, sentido: -1 },
-    { t0: 40, rotulo: 'duas pessoas em sentidos opostos', pesos: [75], passo_hz: 1.9, sentido: 1 },
-    { t0: 41, rotulo: null, pesos: [66], passo_hz: 1.8, sentido: -1 },
-    { t0: 60, rotulo: 'grupo de quatro pessoas', pesos: [68, 74, 59, 81], passo_hz: 2.0, sentido: 1 },
-    { t0: 82, rotulo: 'grupo grande, como no horário de pico', pesos: [72, 65, 80, 58, 77, 69, 90, 63], passo_hz: 1.9, sentido: -1 }
+    { t0: 17, rotulo: 'um casal devagar e uma pessoa apressada que o ultrapassa', pesos: [62, 84], passo_hz: 1.7, sentido: 1, fileira: 2 },
+    { t0: 18, rotulo: null, pesos: [78], passo_hz: 2.2, sentido: 1 },
+    { t0: 35, rotulo: 'três pessoas lado a lado', pesos: [71, 58, 77], passo_hz: 1.75, sentido: -1, fileira: 3 },
+    { t0: 53, rotulo: 'quatro pessoas lado a lado', pesos: [68, 74, 59, 81], passo_hz: 1.85, sentido: 1, fileira: 4 },
+    { t0: 70, rotulo: 'sentidos opostos: uma pessoa rápida e outra devagar', pesos: [75], passo_hz: 2.2, sentido: 1 },
+    { t0: 71, rotulo: null, pesos: [66], passo_hz: 1.65, sentido: -1 }
   ];
 
   function ensaioDemo(param, fsA = 100) {
-    const p = JSON.parse(JSON.stringify(param || PARAM_PADRAO)), F = p.fluxo;
-    const trav = CENAS_DEMO.map(c => {
-      const v = c.passo_hz * F.comprimento_passo_m;
-      const fim = c.t0 + p.vao_m / v + (c.pesos.length - 1) * F.intervalo_grupo_s;
-      return { t0: c.t0, fim, pesos: c.pesos.slice(), peso_total: c.pesos.reduce((s, x) => s + x, 0),
-        passo_hz: c.passo_hz, v_ms: v, sentido: c.sentido, rotulo: c.rotulo };
-    });
+    const p = prepararSensores(JSON.parse(JSON.stringify(param || PARAM_PADRAO)));
+    const trav = CENAS_DEMO.map((c, i) => travessia(p, c.t0, c.pesos.slice(), c.passo_hz, c.sentido,
+      p.semente * 31 + 100 + i, c.rotulo, c.fileira || 1));
     const dur = Math.ceil(trav[trav.length - 1].fim + 10);
-    const a = respostaPassos(p, trav, dur, fsA, 1), k = escalaPassos(p), rng = gerador((p.semente * 31 + 7) >>> 0);
-    let pico = 0;
-    a.forEach((v, s) => {
-      for (let i = 0; i < v.length; i++) {
-        v[i] = v[i] * k + p.ruido_g * rng.normal();
-        if (s === 0) pico = Math.max(pico, Math.abs(v[i]));
-      }
-    });
+    const { a, pico } = aceleracoes(p, trav, dur, fsA, 1, p.semente * 31 + 7);
     const janelas = janelasLivres(p, trav).filter(j => j.t + p.aquisicao.janela_s <= dur);
-    return {
+    return aplicarSemaforo({
       param: p, demo: true, dia: 0, hora: 0, fs: fsA, dur, aceleracao: a, travessias: trav,
       janelas_livres: janelas.map(j => j.t), medidas: janelas.map(j => j.t),
       pessoas: trav.reduce((s, c) => s + c.pesos.length, 0),
       pico_g: pico, classe: classeSetra(pico), f1_hz: p.modos[0].f_hz, temperatura_c: p.temperatura.ref_c
-    };
+    });
   }
 
   // Posição (m, desde o apoio esquerdo) de cada pessoa sobre a passarela no instante t.
   function pessoasNoInstante(ens, t) {
-    const L = ens.param.vao_m, F = ens.param.fluxo, saida = [];
+    const L = ens.param.vao_m, saida = [];
     ens.travessias.forEach((c, ic) => {
       if (t < c.t0 || t > c.fim) return;
       c.pesos.forEach((peso, k) => {
-        const xr = c.v_ms * (t - c.t0 - k * F.intervalo_grupo_s);
+        const xr = c.v_ms * (t - c.t0 - c.atrasos[k]);
         if (xr < 0 || xr > L) return;
-        saida.push({ x: c.sentido > 0 ? xr : L - xr, peso, grupo: ic, passo: c.passo_hz, sentido: c.sentido });
+        saida.push({ x: c.sentido > 0 ? xr : L - xr, peso, grupo: ic, passo: c.passo_hz, sentido: c.sentido, faixa: c.faixas[k] });
       });
     });
     return saida;
@@ -613,7 +970,8 @@
   }
 
   return {
-    PARAM_PADRAO, ESTADOS, gerador, fft, espectro, picoDominante, picos, perdaRigidez,
-    fluxoHora, janelasLivres, simular, ensaioVirtual, ensaioDemo, pessoasNoInstante, classeSetra, csvEventos
+    PARAM_PADRAO, ESTADOS, CORES, gerador, fft, espectro, picoDominante, picos, perdaRigidez, prepararSensores,
+    fluxoHora, janelasLivres, simular, ensaioVirtual, ensaioDemo, ensaioCenario, pessoasNoInstante, classeSetra,
+    avaliarSemaforo, ensaiosAlarme, csvEventos, csvAlarmes
   };
 });

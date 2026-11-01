@@ -44,7 +44,7 @@
   th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--grid); white-space: nowrap; }
   th { color: var(--text-secondary); font-weight: 600; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  input[type="number"] { font: inherit; color: var(--text-primary); background: var(--input); border: 1px solid var(--axis);
+  input[type="number"], input[type="text"] { font: inherit; color: var(--text-primary); background: var(--input); border: 1px solid var(--axis);
     border-radius: 6px; padding: 4px 6px; width: 100%; min-width: 64px; }
   label.campo { display: grid; gap: 2px; font-size: 13px; color: var(--text-secondary); }
   label.marca { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--text-secondary); }
@@ -75,13 +75,15 @@
   .horas { display: grid; grid-template-columns: repeat(12, minmax(54px, 1fr)); gap: 6px; }
   .horas input { min-width: 0; padding: 3px 4px; }
   @media (max-width: 760px) { .horas { grid-template-columns: repeat(6, 1fr); } }
+  td.longo { white-space: normal; min-width: 280px; }
+  tr.futuro td { color: var(--muted); }
   .rodape { color: var(--muted); font-size: 12.5px; max-width: 1160px; margin: 0 auto; padding: 0 16px 32px; }
 </style>
 </head>
 <body>
 <div class="topo">
   <h1>Monitoramento contínuo da passarela: indicadores por sensor para o modelo IFC</h1>
-  <p class="sub">Simulador virtual, calibrado por um ensaio de vibração real (três acelerômetros, 1.000 Hz). Pessoas atravessam ao longo do dia, com picos de fluxo; depois de cada travessia, com a passarela vazia, o trecho de vibração livre é identificado pela FFT. Por dia, cada sensor recebe um estado. O snapshot resultante vai para o IFC, e as séries ficam no banco de dados.</p>
+  <p class="sub">Simulador virtual, calibrado por um ensaio de vibração real (três acelerômetros, 1.000 Hz). Pessoas atravessam ao longo do dia, com picos de fluxo; depois de cada travessia, com a passarela vazia, o trecho de vibração livre é identificado pela FFT. Por dia, cada sensor recebe um estado. O snapshot resultante vai para o IFC, e as séries ficam no banco de dados. Um semáforo nas cabeceiras reage a limiares de aceleração, ocupação, chuva, vento e ao estado da estrutura; cenários hipotéticos geram alarmes. Trabalho em andamento: estudo de casos, sem dados contínuos reais.</p>
 </div>
 <nav class="abas" role="tablist">
   <button role="tab" data-aba="par" aria-selected="true">1. Parâmetros</button>
@@ -101,6 +103,12 @@
         <button class="b" id="bt-param">Baixar parâmetros (JSON)</button>
         <span class="estado" id="msg"></span>
       </div>
+    </div>
+    <div class="cartao">
+      <h2>Sensores (modelo estático)</h2>
+      <p class="nota">Os três acelerômetros do ensaio têm a amplitude medida. Um acelerômetro acrescentado recebe a amplitude do meio do vão vezes sen(πx/L), em que x é a distância ao apoio; a forma do 2º modo não foi medida, e usa-se a mesma.</p>
+      <div class="rolagem"><table id="tab-sens"></table></div>
+      <div class="acoes" style="margin-top:10px"><button class="b" id="bt-sens-add">Acrescentar acelerômetro</button></div>
     </div>
     <div class="cartao">
       <h2>Calibração pelo ensaio</h2>
@@ -149,12 +157,12 @@
   <section id="aba-painel" hidden>
     <div class="cartao">
       <h2>Estado dos sensores no último dia</h2>
-      <p class="nota">Critério com compensação de temperatura. É o que a plataforma Web mostra para cada Sensor_ID.</p>
+      <p class="nota">Critério com compensação de temperatura. É o que a plataforma Web mostra para cada Sensor_ID. O semáforo segue o estado diário do dia anterior: ATENÇÃO acende o AMARELO; ALERTA acende o VERMELHO, que só o gestor libera, depois da inspeção.</p>
       <div class="sensores" id="cartoes"></div>
     </div>
     <div class="cartao">
       <h2>Snapshot para o IFC</h2>
-      <p class="nota">Indicadores resumidos por Sensor_ID, para um conjunto de propriedades (Pset) do sensor no modelo IFC.</p>
+      <p class="nota">Indicadores resumidos por Sensor_ID, para um conjunto de propriedades (Pset) do sensor no modelo IFC, e o estado do semáforo.</p>
       <pre id="pset"></pre>
       <div class="acoes" style="margin-top:12px">
         <button class="b" id="bt-pset">Baixar snapshot IFC (JSON)</button>
@@ -168,9 +176,9 @@
   <section id="aba-ensaio" hidden>
     <div class="cartao">
       <h2>Ensaio virtual: pessoas atravessando a passarela</h2>
-      <p class="nota">A demonstração mostra, em cerca de 1,5 min, grupos típicos: uma pessoa, duas juntas, duas em sentidos opostos, um grupo de quatro e um grupo grande. Em "Hora do dia", escolha o dia e a hora; as travessias são as mesmas usadas no monitoramento, e uma velocidade maior ajuda a percorrer a hora. Cada passo excita os modos na forma sen(πx/L); a deformação do tabuleiro está ampliada. Embaixo, a vibração aparece parada, como uma corda: a faixa mostra a oscilação no último 0,5 s e, sob cada sensor, os traços marcam o máximo desde o início. Os trechos de vibração livre após as travessias são indicados no quadro.</p>
+      <p class="nota">A demonstração mostra, em cerca de 1,5 min, o uso normal, sem alertas: uma pessoa, um casal ultrapassado por uma pessoa apressada, três e quatro lado a lado, duas em sentidos opostos. Os três cenários de alerta usam os mesmos pedestres, com grupos cada vez maiores e uma multidão no fim. Em "Hora do dia", escolha o dia e a hora; as travessias são as mesmas usadas no monitoramento, e uma velocidade maior ajuda a percorrer a hora. Os cenários hipotéticos (situações de alerta, chuva e vento, falha de sensor) servem para acionar os alarmes; seus valores estão na aba Parâmetros. Cada passo excita os modos na forma sen(πx/L); a deformação do tabuleiro está ampliada. Embaixo, a vibração aparece parada, como uma corda: a faixa mostra a oscilação no último 0,5 s e, sob cada sensor, os traços marcam o máximo desde o início. O semáforo das cabeceiras segue os limiares da aba Parâmetros; no simulador, os pedestres não obedecem ao VERMELHO, e as entradas nesse estado são contadas.</p>
       <div class="acoes">
-        <label class="campo" style="min-width:200px">Cenário<select id="ens-cenario"><option value="demo" selected>Demonstração: grupos típicos</option><option value="hora">Hora do dia (fluxo sorteado)</option></select></label>
+        <label class="campo" style="min-width:200px">Cenário<select id="ens-cenario"><option value="demo" selected>Demonstração: grupos típicos</option><option value="hora">Hora do dia (fluxo sorteado)</option><option value="alerta">Hipotético: situações de alerta</option><option value="tempestade">Hipotético: chuva e vento</option><option value="falha">Hipotético: falha de sensor</option></select></label>
         <label class="campo" style="min-width:90px">Dia<input type="number" id="ens-dia" min="1" step="1" value="1" disabled></label>
         <label class="campo" style="min-width:90px">Hora<input type="number" id="ens-hora" min="0" max="23" step="1" value="8" disabled></label>
         <label class="campo" style="min-width:120px">Velocidade<select id="ens-vel"><option value="1" selected>1×</option><option value="5">5×</option><option value="20">20×</option><option value="60">60×</option></select></label>
@@ -180,6 +188,19 @@
       </div>
       <div class="fig" id="ens-fig" style="margin-top:12px"></div>
       <div class="blocos" id="ens-blocos" style="margin-top:12px"></div>
+      <h3>Registro de alarmes do ensaio</h3>
+      <p class="nota">Trocas de cor do semáforo e avisos. As linhas ainda não alcançadas pela animação aparecem esmaecidas.</p>
+      <div class="rolagem" style="max-height:260px;overflow-y:auto"><table id="ens-reg"></table></div>
+    </div>
+    <div class="cartao">
+      <h2>Ensaios de alarme (E1 a E5)</h2>
+      <p class="nota">Estudo de casos com os parâmetros atuais: E1 dia normal (24 h); E2 situações de alerta; E3 chuva e vento; E4 perda de rigidez (dos 60 dias simulados); E5 falha de sensor. Leva alguns segundos.</p>
+      <div class="acoes">
+        <button class="b pri" id="bt-ensaios">Rodar ensaios</button>
+        <button class="b" id="bt-alarmes" disabled>Baixar registro de alarmes (CSV)</button>
+        <span class="estado" id="ensaios-msg"></span>
+      </div>
+      <div class="rolagem" style="margin-top:12px"><table id="tab-ensaios"></table></div>
     </div>
   </section>
 </main>
@@ -197,12 +218,12 @@ const GRUPOS = [
   ['Monitoramento', [
     ['Semente', 'semente', 1, 1], ['Dias simulados', 'dias', 1, 1],
     ['Dias de linha de base', 'dias_baseline', 1, 1], ['Medições por hora (máx.)', 'medicoes_max_por_hora', 1, 1],
-    ['Vão (m)', 'vao_m', 1, 0.05]]],
+    ['Vão (m)', 'vao_m', 1, 0.05], ['Largura útil (m)', 'largura_m', 1, 0.05]]],
   ['Fluxo de pessoas', [
     ['Peso médio (kg)', 'fluxo.peso_medio_kg', 1, 1], ['Desvio do peso (kg)', 'fluxo.peso_desvio_kg', 1, 1],
     ['Pessoas extras por grupo, fora de pico', 'fluxo.grupo_extra_fora_pico', 1, 0.1], ['Pessoas extras por grupo, no pico', 'fluxo.grupo_extra_pico', 1, 0.1],
     ['Passo mínimo (Hz)', 'fluxo.passo_hz.0', 1, 0.1], ['Passo máximo (Hz)', 'fluxo.passo_hz.1', 1, 0.1],
-    ['Intervalo entre pessoas do grupo (s)', 'fluxo.intervalo_grupo_s', 1, 0.1], ['Pico com uma pessoa (mg)', 'fluxo.pico_1_pessoa_g', 1000, 5]]],
+    ['Intervalo entre fileiras do grupo (s)', 'fluxo.intervalo_grupo_s', 1, 0.1], ['Pessoas lado a lado (máx.)', 'fluxo.lado_a_lado_max', 1, 1], ['Pico com uma pessoa (mg)', 'fluxo.pico_1_pessoa_g', 1000, 5]]],
   ['Sensores', [
     ['Ruído do acelerômetro (mg)', 'ruido_g', 1000, 0.1], ['Dispersão da amplitude (log)', 'dispersao_amplitude', 1, 0.05],
     ['Repetibilidade de f (%)', 'repetibilidade', 100, 0.01]]],
@@ -216,11 +237,22 @@ const GRUPOS = [
     ['Perda de rigidez (%)', 'dano.perda_rigidez', 100, 0.1]]],
   ['Critério de estado', [
     ['ATENÇÃO acima de (σ)', 'criterio.k_atencao', 1, 0.5], ['ALERTA acima de (σ)', 'criterio.k_alerta', 1, 0.5],
-    ['Persistência do ALERTA (dias)', 'criterio.persistencia_dias', 1, 1]]]
+    ['Persistência do ALERTA (dias)', 'criterio.persistencia_dias', 1, 1]]],
+  ['Semáforo: limiares AMARELO e VERMELHO', [
+    ['Pico, AMARELO (m/s²)', 'semaforo.pico_ms2.0', 1, 0.1], ['Pico, VERMELHO (m/s²; 0 = sem)', 'semaforo.pico_ms2.1', 1, 0.1],
+    ['Ocupação, AMARELO (pessoas/m²)', 'semaforo.ocupacao_pm2.0', 1, 0.1], ['Ocupação, VERMELHO (pessoas/m²; 0 = sem)', 'semaforo.ocupacao_pm2.1', 1, 0.1],
+    ['Ocupação com chuva ou vento, VERMELHO (pessoas/m²)', 'semaforo.ocupacao_clima_pm2', 1, 0.05],
+    ['Chuva, AMARELO (mm/h)', 'semaforo.chuva_mmh.0', 1, 1],
+    ['Vento, AMARELO (m/s)', 'semaforo.vento_ms.0', 1, 1], ['Vento, VERMELHO (m/s)', 'semaforo.vento_ms.1', 1, 1],
+    ['Histerese (%)', 'semaforo.histerese', 100, 1], ['Tempo para sair do AMARELO (s)', 'semaforo.tempo_amarelo_s', 1, 5],
+    ['Tempo para sair do VERMELHO (s)', 'semaforo.tempo_vermelho_s', 1, 10]]],
+  ['Cenários de alarme (ensaio virtual)', [
+    ['Situações de alerta: multidão (pessoas)', 'cenarios.multidao_pessoas', 1, 5], ['Situações de alerta: multidão chega em (s)', 'cenarios.multidao_chegada_s', 1, 5],
+    ['Chuva e vento: chuva máxima (mm/h)', 'cenarios.chuva_max_mmh', 1, 5], ['Chuva e vento: vento máximo (m/s)', 'cenarios.vento_max_ms', 1, 1]]]
 ];
 
 let P = JSON.parse(JSON.stringify(Motor.PARAM_PADRAO));
-let R = null;
+let R = null, R_P = '';   // R_P: parâmetros (JSON) da última simulação
 
 const ler = (obj, cam) => cam.split('.').reduce((o, k) => o[k], obj);
 const gravar = (obj, cam, v) => { const k = cam.split('.'); const u = k.pop(); k.reduce((o, c) => o[c], obj)[u] = v; };
@@ -251,10 +283,33 @@ function desenharCampos() {
   $('#ck-interp').addEventListener('change', e => { P.criterio.interpolacao = e.target.checked; });
 }
 
+// Tabela de sensores: os do ensaio são fixos; os acrescentados têm Sensor_ID e posição editáveis.
+function desenharSensores() {
+  let h = '<thead><tr><th>Sensor_ID</th><th>Canal</th><th>Posição</th><th class="num">x (m)</th><th>Amplitude</th><th></th></tr></thead><tbody>';
+  P.sensores.forEach((s, i) => {
+    const novo = !s.amplitudes_g;
+    h += novo
+      ? `<tr><td><input type="text" data-i="${i}" data-k="sensor_id" value="${esc(s.sensor_id)}" style="width:110px"></td><td>-</td><td>${esc(s.posicao)}</td>
+         <td class="num"><input type="number" step="0.1" min="0" max="${P.vao_m}" data-i="${i}" data-k="posicao_m" value="${s.posicao_m}" style="width:80px"></td>
+         <td>pela forma do modo</td><td><button class="b peq" data-rem="${i}">Remover</button></td></tr>`
+      : `<tr><td>${esc(s.sensor_id)}</td><td>${esc(s.canal)}</td><td>${esc(s.posicao)}</td><td class="num">${num(s.posicao_m, 2)}</td><td>medida no ensaio</td><td></td></tr>`;
+  });
+  $('#tab-sens').innerHTML = h + '</tbody>';
+  document.querySelectorAll('#tab-sens input').forEach(inp => inp.addEventListener('change', () => {
+    const s = P.sensores[+inp.dataset.i];
+    if (inp.dataset.k === 'sensor_id') s.sensor_id = inp.value.trim() || s.sensor_id;
+    else { s.posicao_m = Math.min(P.vao_m, Math.max(0, Number(inp.value))); s.posicao = `x = ${num(s.posicao_m, 2)} m`; }
+    desenharSensores();
+  }));
+  document.querySelectorAll('#tab-sens [data-rem]').forEach(b => b.addEventListener('click', () => {
+    P.sensores.splice(+b.dataset.rem, 1); desenharSensores();
+  }));
+}
+
 function desenharCalibracao() {
   let h = '<thead><tr><th>Sensor_ID</th><th>Canal</th><th>Posição</th>' +
     P.modos.map(m => `<th class="num">Amplitude a ${num(m.f_hz, 2)} Hz (g)</th>`).join('') + '</tr></thead><tbody>';
-  P.sensores.forEach(s => {
+  P.sensores.filter(s => s.amplitudes_g).forEach(s => {
     h += `<tr><td>${esc(s.sensor_id)}</td><td>${esc(s.canal)}</td><td>${esc(s.posicao)}</td>` +
       s.amplitudes_g.map(a => `<td class="num">${num(a, 5)}</td>`).join('') + '</tr>';
   });
@@ -412,6 +467,7 @@ function figuraFluxoSVG(res, T) {
 
 // Quadro da animação do ensaio virtual no instante t (s desde o início da hora).
 const CORES_GRUPO = ['#2a78d6', '#eb6834', '#0ca30c', '#8a4fd6', '#d03b3b', '#1c9aa5'];
+const COR_SEM = { VERDE: '#0ca30c', AMARELO: '#e6a100', VERMELHO: '#d03b3b' };
 function quadroEnsaioSVG(E, t, T) {
   const W = 760, H = 380, x0 = 70, x1 = 690, yD = 120, L = E.param.vao_m;
   const fs = E.fs, a = E.aceleracao[0], i = Math.min(a.length - 1, Math.max(0, Math.floor(t * fs)));
@@ -423,45 +479,86 @@ function quadroEnsaioSVG(E, t, T) {
   const seg = Math.floor(t), hh = String(E.hora).padStart(2, '0'), mm = String(Math.floor(seg / 60)).padStart(2, '0'), ss = String(seg % 60).padStart(2, '0');
   const pessoas = Motor.pessoasNoInstante(E, t);
   const feitas = E.travessias.filter(c => c.fim <= t).length;
-  s += `<text x="${x0}" y="22" font-size="15" font-weight="650">${E.demo ? `Demonstração, ${mm}:${ss}` : `Dia ${E.dia + 1}, ${hh}:${mm}:${ss}`}</text>`;
-  s += `<text x="${x1}" y="22" text-anchor="end">${pessoas.length} na passarela · ${feitas} de ${E.travessias.length} travessias concluídas</text>`;
-  if (E.demo) {
-    const cenas = E.travessias.filter(c => c.rotulo), n = cenas.filter(c => c.t0 <= t + 1).length;
-    if (n) s += `<text x="${(x0 + x1) / 2}" y="54" text-anchor="middle" font-size="16" font-weight="650" fill="${T.corrigida}">${n} de ${cenas.length}: ${esc(cenas[n - 1].rotulo)}</text>`;
+  const relogio = E.demo ? `Demonstração, ${mm}:${ss}` : E.cenario ? `Cenário hipotético, ${mm}:${ss}` : `Dia ${E.dia + 1}, ${hh}:${mm}:${ss}`;
+  s += `<text x="${x0}" y="22" font-size="15" font-weight="650">${relogio}</text>`;
+  const dens = pessoas.length / (L * E.param.largura_m);
+  s += `<text x="${x1}" y="22" text-anchor="end">${pessoas.length} na passarela (${num(dens, 2)} por m²) · ${feitas} de ${E.travessias.length} travessias concluídas</text>`;
+  // semáforo: cor no segundo atual; legenda das cores com os limiares de aceleração
+  const k = Math.min(E.semaforo.cor.length - 1, seg), cor = E.semaforo.cor[k];
+  const [lA, lV] = E.param.semaforo.pico_ms2;
+  // alinhada à direita (largura estimada pelo número de caracteres)
+  const itens = lV > 0
+    ? [[COR_SEM.VERDE, `até ${num(lA, 1)}`], [COR_SEM.AMARELO, `${num(lA, 1)} a ${num(lV, 1)}`], [COR_SEM.VERMELHO, `acima de ${num(lV, 1)} m/s²`]]
+    : [[COR_SEM.VERDE, `até ${num(lA, 1)}`], [COR_SEM.AMARELO, `acima de ${num(lA, 1)} m/s²`]];
+  const largura = it => 17 + it[1].length * 6.6;
+  let lx = x1 - itens.reduce((a, it) => a + largura(it), 0) - 16 * (itens.length - 1);
+  itens.forEach(it => {
+    s += `<rect x="${lx}" y="32" width="12" height="12" rx="2" fill="${it[0]}"/><text x="${lx + 17}" y="42">${it[1]}</text>`;
+    lx += largura(it) + 16;
+  });
+  if (E.ambiente) s += `<text x="${x1}" y="62" text-anchor="end">chuva ${num(E.ambiente.chuva[k], 0)} mm/h · vento ${num(E.ambiente.vento[k], 0)} m/s</text>`;
+  [x0 - 40, x1 + 40].forEach(xc => {
+    s += `<line x1="${xc}" x2="${xc}" y1="${yD - 16}" y2="${yD + 26}" stroke="${T.eixo}" stroke-width="3"/>`;
+    s += `<rect x="${xc - 10}" y="${yD - 66}" width="20" height="52" rx="4" fill="#2c2c2a"/>`;
+    [2, 1, 0].forEach((c, j) => s += `<circle cx="${xc}" cy="${yD - 57 + j * 17}" r="6.5" fill="${c === cor ? [COR_SEM.VERDE, COR_SEM.AMARELO, COR_SEM.VERMELHO][c] : '#555'}"/>`);
+  });
+  const cenas = E.travessias.filter(c => c.rotulo);
+  if (cenas.length) {
+    const n = cenas.filter(c => c.t0 <= t + 1).length;
+    if (n) s += `<text x="${(x0 + x1) / 2}" y="68" text-anchor="middle" font-size="16" font-weight="650" fill="${T.corrigida}">${n} de ${cenas.length}: ${esc(cenas[n - 1].rotulo)}</text>`;
   }
   // apoios e tabuleiro deformado (ampliado)
   s += `<path d="M${x0 - 12},${yD + 26} L${x0},${yD + 6} L${x0 + 12},${yD + 26} Z" fill="${T.eixo}"/>`;
   s += `<path d="M${x1 - 12},${yD + 26} L${x1},${yD + 6} L${x1 + 12},${yD + 26} Z" fill="${T.eixo}"/>`;
-  const def = -a[i] / amax * 16;
+  const def = -a[i] / amax * 4;   // só visual: no máximo 4 px no meio do vão; o sinal não muda
   const pts = [];
   for (let k = 0; k <= 40; k++) { const xm = L * k / 40; pts.push(`${xs(xm).toFixed(1)},${(yD + def * Math.sin(Math.PI * xm / L)).toFixed(1)}`); }
   s += `<polyline points="${pts.join(' ')}" fill="none" stroke="${T.texto}" stroke-width="5" stroke-linecap="round"/>`;
-  // sensores
-  E.param.sensores.forEach((sn, k) => {
-    const xm = [L / 2, L / 4, 0.03 * L][k] ?? L / 2;
-    const yy = yD + def * Math.sin(Math.PI * xm / L) + 8;
-    s += `<rect x="${xs(xm) - 4}" y="${yy}" width="8" height="8" fill="${T.corrigida}"/>`;
-    s += `<text x="${xs(xm)}" y="${yy + 22}" text-anchor="middle" font-size="10">${esc(sn.sensor_id)}</text>`;
+  // sensores (vazados quando sem dados)
+  const semDados = j => E.falhas.some(f => (f.j === -1 || f.j === j) && t >= f.t0 && t < f.t1);
+  E.param.sensores.forEach((sn, j) => {
+    const xm = sn.posicao_m, yy = yD + def * Math.sin(Math.PI * xm / L) + 8;
+    s += `<rect x="${xs(xm) - 4}" y="${yy}" width="8" height="8" fill="${semDados(j) ? 'none' : T.corrigida}" stroke="${T.corrigida}"/>`;
+    s += `<text x="${xs(xm)}" y="${yy + 22}" text-anchor="middle" font-size="10">${esc(sn.sensor_id)}${semDados(j) ? ' (sem dados)' : ''}</text>`;
   });
-  // pessoas: cabeça e corpo, tamanho pelo peso, cor pelo grupo
-  pessoas.forEach(pp => {
-    const xx = xs(pp.x), yy = yD + def * Math.sin(Math.PI * pp.x / L) - 4;
-    const alt = 26 + (pp.peso - 70) * 0.12, cor = CORES_GRUPO[pp.grupo % CORES_GRUPO.length];
+  // pessoas: cabeça e corpo, tamanho pelo peso, cor pelo grupo; lado a lado em leve perspectiva
+  // (faixas de trás um pouco acima, deslocadas e mais claras), desenhadas de trás para a frente
+  pessoas.slice().sort((p1, p2) => p2.faixa - p1.faixa).forEach(pp => {
+    const xx = xs(pp.x) + pp.faixa * 5, yy = yD + def * Math.sin(Math.PI * pp.x / L) - 4 - pp.faixa * 5;
+    const alt = 26 + (pp.peso - 70) * 0.12, cor = CORES_GRUPO[pp.grupo % CORES_GRUPO.length], op = 1 - 0.18 * pp.faixa;
     const passo = Math.sin(2 * Math.PI * pp.passo * t) * 4;
+    s += `<g opacity="${op}">`;
     s += `<line x1="${xx}" y1="${yy - alt * 0.45}" x2="${xx + passo}" y2="${yy}" stroke="${cor}" stroke-width="2.5"/>`;
     s += `<line x1="${xx}" y1="${yy - alt * 0.45}" x2="${xx - passo}" y2="${yy}" stroke="${cor}" stroke-width="2.5"/>`;
     s += `<line x1="${xx}" y1="${yy - alt * 0.45}" x2="${xx}" y2="${yy - alt * 0.85}" stroke="${cor}" stroke-width="3"/>`;
-    s += `<circle cx="${xx}" cy="${yy - alt}" r="${3 + pp.peso / 40}" fill="${cor}"/>`;
+    s += `<circle cx="${xx}" cy="${yy - alt}" r="${3 + pp.peso / 40}" fill="${cor}"/></g>`;
   });
-  s += `<text x="${(x0 + x1) / 2}" y="${yD + 52}" text-anchor="middle" font-size="11" fill="${T.eixo}">vão de ${num(L, 2)} m · deformação ampliada</text>`;
+  // anúncio: quem está atravessando (pessoas e peso) ou, com a passarela vazia, o próximo grupo e quando chega
+  const tempoTxt = d => d < 60 ? `${num(d, 0)} s` : `${Math.floor(d / 60)} min ${String(Math.floor(d % 60)).padStart(2, '0')} s`;
+  const qtd = n => n === 1 ? '1 pessoa' : `${n} pessoas`;
+  let anuncio;
+  if (pessoas.length) {
+    const grupos = new Set(pessoas.map(q => q.grupo)).size, peso = pessoas.reduce((a, q) => a + q.peso, 0);
+    anuncio = `Atravessando: ${qtd(pessoas.length)}${grupos > 1 ? ` em ${grupos} grupos` : ''}, ${num(peso, 0)} kg no total`;
+  } else {
+    const prox = E.travessias.find(c => c.t0 > t);
+    anuncio = prox ? `Passarela vazia. Próximo grupo: ${qtd(prox.pesos.length)}, ${num(prox.peso_total, 0)} kg, ` +
+      `pela ${prox.sentido > 0 ? 'esquerda' : 'direita'}, em ${tempoTxt(prox.t0 - t)}` : 'Passarela vazia. Nenhuma travessia até o fim do ensaio';
+  }
+  s += `<text x="${(x0 + x1) / 2}" y="${yD + 52}" text-anchor="middle" font-size="13" font-weight="650">${esc(anuncio)}</text>`;
+  s += `<text x="${(x0 + x1) / 2}" y="${yD + 69}" text-anchor="middle" font-size="11" fill="${T.eixo}">vão de ${num(L, 2)} m · deformação ampliada</text>`;
   // vibração parada, como corda de violão: faixa de oscilação recente (envoltória) na forma
   // sen(πx/L) e, embaixo de cada sensor, a sua envoltória e o máximo da hora até o instante
   const gy0 = 205, gy1 = 335, gm = (gy0 + gy1) / 2, G = 9.81;
-  const esc_ms2 = Math.max(amax * G, 1.2), yG = v => gm - (gy1 - gy0) / 2 * v / esc_ms2;   // v em m/s²
+  // escala: o maior valor do ensaio, mas sempre com folga acima do limiar VERMELHO, para as linhas aparecerem
+  const [limA, limV] = E.param.semaforo.pico_ms2;
+  const esc_ms2 = Math.max(amax * G, 1.15 * (limV || limA || 1)), yG = v => gm - (gy1 - gy0) / 2 * v / esc_ms2;   // v em m/s²
   const env = envoltoria(E, i, Math.round(0.5 * fs)), maxH = maximoAte(E, i);
-  [0.5, 1.0, 2.5].forEach(lim => {
-    if (lim < esc_ms2) [lim, -lim].forEach(v => s += `<line x1="${x0}" x2="${x1}" y1="${yG(v).toFixed(1)}" y2="${yG(v).toFixed(1)}" stroke="${T.eixo}" stroke-dasharray="4 3"/>`);
-    if (lim < esc_ms2) s += `<text x="${x1 + 6}" y="${yG(lim) + 4}" font-size="10">${num(lim, 1)}</text>`;
+  // limiares do semáforo: acima da linha amarela, AMARELO; acima da vermelha, VERMELHO
+  [[limA, COR_SEM.AMARELO], [limV, COR_SEM.VERMELHO]].forEach(([lim, c]) => {
+    if (!(lim > 0)) return;
+    [lim, -lim].forEach(v => s += `<line x1="${x0}" x2="${x1}" y1="${yG(v).toFixed(1)}" y2="${yG(v).toFixed(1)}" stroke="${c}" stroke-width="1.2" stroke-dasharray="5 3"/>`);
+    s += `<text x="${x1 + 6}" y="${yG(lim) + 4}" font-size="10" fill="${c}" font-weight="650">${num(lim, 1)}</text>`;
   });
   s += `<line x1="${x0}" x2="${x1}" y1="${gm}" y2="${gm}" stroke="${T.eixo}"/>`;
   const lente = [], corda = [];
@@ -474,18 +571,19 @@ function quadroEnsaioSVG(E, t, T) {
   s += `<polygon points="${lente.join(' ')}" fill="${T.faixa}" stroke="none"/>`;
   s += `<polyline points="${corda.join(' ')}" fill="none" stroke="${T.corrigida}" stroke-width="1.5"/>`;
   E.param.sensores.forEach((sn, k) => {
-    const xx = xs([L / 2, L / 4, 0.03 * L][k] ?? L / 2), e = env[k] * G, m = maxH[k] * G;
+    const xx = xs(sn.posicao_m), e = env[k] * G, m = maxH[k] * G;
     s += `<line x1="${xx}" x2="${xx}" y1="${gy0}" y2="${gy1}" stroke="${T.grade}"/>`;
     s += `<rect x="${xx - 5}" y="${yG(e).toFixed(1)}" width="10" height="${Math.max(1, yG(-e) - yG(e)).toFixed(1)}" fill="${T.corrigida}" opacity="0.55"/>`;
     [m, -m].forEach(v => s += `<line x1="${xx - 10}" x2="${xx + 10}" y1="${yG(v).toFixed(1)}" y2="${yG(v).toFixed(1)}" stroke="${T.texto}" stroke-width="2"/>`);
-    const ancora = k === 2 ? 'start' : 'middle', xt = k === 2 ? xx - 8 : xx;
+    const borda = sn.posicao_m < 0.1 * L ? 'start' : sn.posicao_m > 0.9 * L ? 'end' : 'middle';
+    const ancora = borda, xt = borda === 'start' ? xx - 8 : borda === 'end' ? xx + 8 : xx;
     s += `<text x="${xt}" y="${gy1 + 14}" text-anchor="${ancora}" font-size="10">${num(e, 2)} m/s²</text>`;
     s += `<text x="${xt}" y="${gy1 + 26}" text-anchor="${ancora}" font-size="10" fill="${T.eixo}">máx. ${num(m, 2)}</text>`;
   });
   const livre = E.janelas_livres.find(tl => t >= tl && t < tl + E.param.aquisicao.janela_s);
   if (livre !== undefined) s += `<text x="${x1}" y="${gy0 - 6}" text-anchor="end" font-size="11" font-weight="650">vibração livre${E.medidas.includes(livre) ? ': trecho em medição' : ''}</text>`;
   s += `<text transform="translate(26 ${gm}) rotate(-90)" text-anchor="middle" font-size="11">a (m/s²)</text>`;
-  s += `<text x="${x0}" y="${H - 6}" font-size="11">faixa: oscilação no último 0,5 s · traços: máximo desde o início · tracejado: limites do Sétra (m/s²)</text>`;
+  s += `<text x="${x0}" y="${H - 6}" font-size="11">faixa: oscilação no último 0,5 s · traços: máximo desde o início · tracejado amarelo e vermelho: limiares do semáforo (m/s²)</text>`;
   return s + '</svg>';
 }
 
@@ -550,7 +648,12 @@ function desenharFigura() {
 const COR_ESTADO = { BASELINE: '#898781', NORMAL: '#0ca30c', 'ATENÇÃO': '#fab219', ALERTA: '#d03b3b' };
 
 function desenharPainel() {
-  $('#cartoes').innerHTML = R.sensores.map(r => {
+  const sm = R.pset_semaforo, cs = COR_SEM[sm.LastColor];
+  $('#cartoes').innerHTML = `<div class="sensor" style="border-left-color:${cs}">
+      <span class="selo" style="background:${cs};color:${sm.LastColor === 'AMARELO' ? '#000' : '#fff'}">${esc(sm.LastColor)}</span>
+      <div class="id">Semáforo das cabeceiras</div><div class="pos">${esc(sm.Semaforo_ID)} · ${esc(sm.LastUpdate)}</div>
+      <dl><dt>Causa</dt><dd style="text-align:left">${esc(sm.LastCause || 'estado diário NORMAL')}</dd></dl></div>` +
+    R.sensores.map(r => {
     const d = ultimoDia(r), e = r.com.estado[d], cor = COR_ESTADO[e];
     return `<div class="sensor" style="border-left-color:${cor}">
       <span class="selo" style="background:${cor};color:${e === 'ATENÇÃO' ? '#000' : '#fff'}">${esc(e)}</span>
@@ -562,32 +665,39 @@ function desenharPainel() {
       <dt>RMS médio do dia</dt><dd>${num(r.rms_dia[d] * 1000, 2)} mg</dd>
       <dt>Modelo numérico</dt><dd>${num(R.param.f_mef_hz, 3)} Hz</dd></dl></div>`;
   }).join('');
-  $('#pset').textContent = JSON.stringify(R.pset, null, 2);
+  $('#pset').textContent = JSON.stringify(psetIFC(), null, 2);
 }
+const psetIFC = () => ({ sensores: R.pset, semaforo: R.pset_semaforo });
 
 // ---------------------------------------------------------------------------
 // Ensaio virtual (animação)
 // ---------------------------------------------------------------------------
-const ENS = { E: null, t: 0, rodando: false, ultimo: 0, desenhado: 0 };
+const ENS = { E: null, t: 0, rodando: false, ultimo: 0, desenhado: 0, linhasReg: -1 };
+const mmss = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 function gerarEnsaio() {
   const dia = Math.max(1, Math.min(P.dias, Math.round(Number($('#ens-dia').value) || 1))) - 1;
   const hora = Math.max(0, Math.min(23, Math.round(Number($('#ens-hora').value) || 0)));
-  const demo = $('#ens-cenario').value === 'demo';
+  const cen = $('#ens-cenario').value, demo = cen === 'demo';
   $('#ens-msg').textContent = 'Gerando…';
   setTimeout(() => {
     try {
-      ENS.E = demo ? Motor.ensaioDemo(P) : Motor.ensaioVirtual(P, dia, hora);
-      ENS.t = !demo && ENS.E.travessias.length ? Math.max(0, ENS.E.travessias[0].t0 - 5) : 0;
-      ENS.rodando = true; ENS.ultimo = performance.now();
-      const E = ENS.E;
+      // na hora do dia, o semáforo recebe o estado da estrutura do dia (da última simulação)
+      const sd = R && R.semaforo_dia[dia];
+      ENS.E = demo ? Motor.ensaioDemo(P)
+        : cen === 'hora' ? Motor.ensaioVirtual(P, dia, hora, 100, { estrutura: sd ? sd.nivel : 0, causa_estrutura: sd && sd.causa })
+        : Motor.ensaioCenario(P, cen);
+      ENS.t = cen === 'hora' && ENS.E.travessias.length ? Math.max(0, ENS.E.travessias[0].t0 - 5) : 0;
+      ENS.rodando = true; ENS.ultimo = performance.now(); ENS.linhasReg = -1;
+      const E = ENS.E, S = E.semaforo;
       $('#ens-blocos').innerHTML = [
-        [demo ? 'Travessias na demonstração' : 'Travessias na hora', `${E.travessias.length}`, `${E.pessoas} pessoas`],
+        [demo ? 'Travessias na demonstração' : cen === 'hora' ? 'Travessias na hora' : 'Travessias no cenário', `${E.travessias.length}`, `${E.pessoas} pessoas`],
         ['Pico no meio do vão', `${num(E.pico_g * 9.81, 2)} m/s²`, `${num(E.pico_g, 3)} g · ${E.classe} (Sétra)`],
-        ['Trechos de vibração livre', `${E.janelas_livres.length}`, demo ? 'após cada travessia' : `${E.medidas.length} usados na medição da hora`],
-        [demo ? 'Primeiro modo' : 'Primeiro modo na hora', `${num(E.f1_hz, 3)} Hz`, demo ? `estrutura a ${num(E.temperatura_c, 1)} °C` : `ar a ${num(E.temperatura_c, 1)} °C`]
+        ['Pior cor do semáforo', Motor.CORES[S.pior], `VERMELHO ${S.tempo_s[2]} s, AMARELO ${S.tempo_s[1]} s`],
+        ['Entradas com VERMELHO', `${S.entradas_vermelho}`, 'pessoas que o semáforo teria impedido'],
+        [demo || E.cenario ? 'Primeiro modo' : 'Primeiro modo na hora', `${num(E.f1_hz, 3)} Hz`, demo || E.cenario ? `estrutura a ${num(E.temperatura_c, 1)} °C` : `ar a ${num(E.temperatura_c, 1)} °C`]
       ].map(([r, v, c]) => `<div class="bloco"><div class="rot">${esc(r)}</div><div class="val">${esc(v)}</div><div class="cmp">${esc(c)}</div></div>`).join('');
-      $('#ens-msg').textContent = E.travessias.length ? '' : 'Ninguém atravessa nesta hora.';
+      $('#ens-msg').textContent = E.cenario ? E.titulo : E.travessias.length ? '' : 'Ninguém atravessa nesta hora.';
       $('#ens-pausa').textContent = 'Pausar';
       requestAnimationFrame(quadro);
     } catch (e) {
@@ -600,15 +710,53 @@ function gerarEnsaio() {
 function quadro(agora) {
   if (!ENS.E) return;
   if (ENS.rodando) {
-    ENS.t = Math.min(ENS.E.dur, ENS.t + (agora - ENS.ultimo) / 1000 * Number($('#ens-vel').value));
-    if (ENS.t >= ENS.E.dur) ENS.rodando = false;
+    ENS.t += (agora - ENS.ultimo) / 1000 * Number($('#ens-vel').value);
+    if (ENS.t >= ENS.E.dur) { ENS.t = 0; ENS.linhasReg = -1; }   // fim do ensaio: recomeça (repetição contínua)
   }
   ENS.ultimo = agora;
   if (agora - ENS.desenhado > 33 || !ENS.rodando) {
     $('#ens-fig').innerHTML = quadroEnsaioSVG(ENS.E, ENS.t, TEMA_TELA);
+    desenharRegistro();
     ENS.desenhado = agora;
   }
   if (ENS.rodando) requestAnimationFrame(quadro);
+}
+
+// Registro de alarmes do ensaio; redesenha só quando muda o número de linhas já alcançadas.
+function desenharRegistro() {
+  const E = ENS.E, reg = E.semaforo.registro, feitas = reg.filter(r => r.t_s - E.t0_s <= ENS.t).length;
+  if (feitas === ENS.linhasReg) return;
+  ENS.linhasReg = feitas;
+  const inst = r => E.cenario || E.demo ? mmss(r.t_s - E.t0_s) : `${String(E.hora).padStart(2, '0')}:${mmss(r.t_s - E.t0_s)}`;
+  $('#ens-reg').innerHTML = '<thead><tr><th>Instante</th><th>Tipo</th><th>Cor</th><th>Causa</th><th class="num">Valor</th><th class="num">Limiar</th><th>Sensor_ID</th><th class="num">Pessoas</th><th>Aviso</th></tr></thead><tbody>' +
+    (reg.length ? reg.map((r, i) => `<tr class="${i < feitas ? '' : 'futuro'}"><td>${inst(r)}</td><td>${esc(r.tipo)}</td>
+      <td>${r.para ? `<b style="color:${COR_SEM[r.para]}">${esc(r.para)}</b>` : ''}</td><td>${esc(r.causa)}</td>
+      <td class="num">${r.valor === '' ? '' : num(r.valor, 2) + ' ' + esc(r.unidade)}</td><td class="num">${r.limiar === '' ? '' : num(r.limiar, 1)}</td>
+      <td>${esc(r.sensor_id)}</td><td class="num">${r.pessoas}</td><td>${esc(r.aviso)}</td></tr>`).join('')
+      : '<tr><td colspan="9">Nenhum alarme: o semáforo ficou VERDE.</td></tr>') + '</tbody>';
+}
+
+// Ensaios de alarme E1 a E5 (simula de novo se os parâmetros mudaram desde a última simulação).
+let ENSAIOS = null;
+function rodarEnsaios() {
+  $('#ensaios-msg').textContent = 'Rodando…';
+  $('#bt-ensaios').disabled = true;
+  setTimeout(() => {
+    try {
+      if (!R || R_P !== JSON.stringify(P)) { R = Motor.simular(P); R_P = JSON.stringify(P); desenharResultados(); desenharPainel(); }
+      ENSAIOS = Motor.ensaiosAlarme(P, R);
+      $('#tab-ensaios').innerHTML = '<thead><tr><th>Ensaio</th><th>Cenário</th><th>Esperado</th><th>Obtido</th><th>Reação</th><th>Detalhe</th></tr></thead><tbody>' +
+        ENSAIOS.linhas.map(l => `<tr><td>${l.id}</td><td class="longo">${esc(l.cenario)}</td><td>${esc(l.esperado)}</td><td>${esc(l.obtido)}</td>
+          <td class="longo">${esc(l.reacao)}</td><td class="longo">${esc(l.detalhe)}</td></tr>`).join('') + '</tbody>';
+      $('#bt-alarmes').disabled = false;
+      $('#ensaios-msg').textContent = `${ENSAIOS.registro.length} linhas no registro de alarmes.`;
+    } catch (e) {
+      $('#ensaios-msg').textContent = 'Erro: ' + e.message;
+      console.error(e);
+    } finally {
+      $('#bt-ensaios').disabled = false;
+    }
+  }, 30);
 }
 
 // ---------------------------------------------------------------------------
@@ -642,7 +790,7 @@ function simular() {
   setTimeout(() => {
     try {
       const t0 = performance.now();
-      R = Motor.simular(P);
+      R = Motor.simular(P); R_P = JSON.stringify(P);
       desenharResultados();
       desenharPainel();
       $('#msg').textContent = `Concluído em ${num((performance.now() - t0) / 1000, 1)} s. Veja as abas Resultados, Painel e Ensaio virtual.`;
@@ -661,7 +809,7 @@ document.querySelectorAll('nav.abas button').forEach(b => b.addEventListener('cl
   if (b.dataset.aba === 'ensaio' && !ENS.E) gerarEnsaio();
 }));
 $('#bt-simular').addEventListener('click', simular);
-$('#bt-padrao').addEventListener('click', () => { P = JSON.parse(JSON.stringify(Motor.PARAM_PADRAO)); desenharCampos(); });
+$('#bt-padrao').addEventListener('click', () => { P = JSON.parse(JSON.stringify(Motor.PARAM_PADRAO)); desenharCampos(); desenharSensores(); });
 $('#bt-param').addEventListener('click', () => baixar('parametros.json', JSON.stringify(P, null, 2), 'application/json'));
 $('#sel-sensor').addEventListener('change', desenharFigura);
 $('#bt-png').addEventListener('click', () => {
@@ -669,13 +817,20 @@ $('#bt-png').addEventListener('click', () => {
   baixarPNG(figuraSVG(R, j, TEMA_CINZA), `monitoramento_${R.sensores[j].sensor_id}.png`);
 });
 $('#bt-png-fluxo').addEventListener('click', () => baixarPNG(figuraFluxoSVG(R, TEMA_CINZA), 'fluxo_por_hora.png'));
-$('#bt-pset').addEventListener('click', () => baixar('snapshot_ifc.json', JSON.stringify(R.pset, null, 2), 'application/json'));
+$('#bt-pset').addEventListener('click', () => baixar('snapshot_ifc.json', JSON.stringify(psetIFC(), null, 2), 'application/json'));
 $('#bt-sensors').addEventListener('click', () => baixar('sensors.json', JSON.stringify(R.snapshot, null, 2), 'application/json'));
 $('#bt-csv').addEventListener('click', () => baixar('eventos.csv', Motor.csvEventos(R), 'text/csv'));
 $('#ens-gerar').addEventListener('click', gerarEnsaio);
 $('#ens-cenario').addEventListener('change', () => {
-  const demo = $('#ens-cenario').value === 'demo';
-  $('#ens-dia').disabled = demo; $('#ens-hora').disabled = demo;
+  const hora = $('#ens-cenario').value === 'hora';
+  $('#ens-dia').disabled = !hora; $('#ens-hora').disabled = !hora;
+});
+$('#bt-ensaios').addEventListener('click', rodarEnsaios);
+$('#bt-alarmes').addEventListener('click', () => baixar('alarmes.csv', Motor.csvAlarmes(ENSAIOS), 'text/csv'));
+$('#bt-sens-add').addEventListener('click', () => {
+  const n = P.sensores.filter(s => !s.amplitudes_g).length + 1, x = +(P.vao_m * 0.75).toFixed(2);
+  P.sensores.push({ sensor_id: `ACC_N${String(n).padStart(2, '0')}`, canal: '-', posicao: `x = ${num(x, 2)} m`, posicao_m: x });
+  desenharSensores();
 });
 $('#ens-pausa').addEventListener('click', () => {
   if (!ENS.E) return;
@@ -685,6 +840,7 @@ $('#ens-pausa').addEventListener('click', () => {
 });
 
 desenharCampos();
+desenharSensores();
 desenharCalibracao();
 simular();
 </script>

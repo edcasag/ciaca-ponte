@@ -3,6 +3,7 @@
   "dias": 60,
   "dias_baseline": 14,
   "vao_m": 11.95,
+  "largura_m": 1.7,
   "aquisicao": {
     "fs_hz": 1000,
     "janela_s": 4.1,
@@ -24,6 +25,7 @@
       "sensor_id": "ACC_MV_01",
       "canal": "A1272_18A",
       "posicao": "Meio do vão",
+      "posicao_m": 5.975,
       "amplitudes_g": [
         0.04988,
         0.01969
@@ -33,6 +35,7 @@
       "sensor_id": "ACC_QV_01",
       "canal": "A1274_18A",
       "posicao": "1/4 do vão",
+      "posicao_m": 2.99,
       "amplitudes_g": [
         0.0293,
         0.01155
@@ -42,6 +45,7 @@
       "sensor_id": "ACC_AP_01",
       "canal": "A1275_18A",
       "posicao": "Apoio",
+      "posicao_m": 0.36,
       "amplitudes_g": [
         0.00121,
         0.00051
@@ -86,6 +90,7 @@
     ],
     "comprimento_passo_m": 0.7,
     "intervalo_grupo_s": 0.6,
+    "lado_a_lado_max": 4,
     "pico_1_pessoa_g": 0.08
   },
   "ruido_g": 0.0003,
@@ -112,5 +117,33 @@
     "k_alerta": 3,
     "persistencia_dias": 2,
     "interpolacao": true
+  },
+  "semaforo": {
+    "pico_ms2": [
+      2.5,
+      null
+    ],
+    "ocupacao_pm2": [
+      0.5,
+      null
+    ],
+    "ocupacao_clima_pm2": 0.75,
+    "chuva_mmh": [
+      10,
+      null
+    ],
+    "vento_ms": [
+      15,
+      20
+    ],
+    "histerese": 0.1,
+    "tempo_amarelo_s": 10,
+    "tempo_vermelho_s": 20
+  },
+  "cenarios": {
+    "multidao_pessoas": 25,
+    "multidao_chegada_s": 15,
+    "chuva_max_mmh": 30,
+    "vento_max_ms": 18
   }
 }
